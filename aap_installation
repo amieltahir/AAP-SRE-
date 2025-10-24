@@ -1,0 +1,33 @@
+Here’s a quick sanity checklist before you launch the playbooks:
+
+Nodes:
+
+controller01 – Controller/Task orchestrator
+hub01 – Hub node
+exec01 – Execution node
+db01 – Database node
+
+Connectivity:
+
+Passwordless SSH from controller01 → hub01, exec01, db01
+Local VM can SSH into controller01 (or any node) using ~/.ssh/config.
+
+Prerequisites:
+
+You have the AAP 2.4 installer bundles locally on the controller node.
+Python 3 installed on all nodes (required for Ansible modules).
+Required ports open: 22 (SSH), 80/443 (web), 5432 (Postgres), etc.
+
+Inventory:
+Already simplified: just hostnames (controller01, hub01, exec01, db01) because SSH config handles IPs and keys.
+
+Ansible Playbooks:
+
+You can start with a playbook that uploads the installer bundles to each node.
+Then a second playbook to run the installation: controller first, database, hub, then execution nodes.
+Ensure idempotency: if a playbook fails, you can rerun without breaking the setup.
+
+Local VM:
+
+Use your simplified inventory and SSH config.
+No --private-key needed since SSH config has the key path.
