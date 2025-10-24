@@ -59,11 +59,12 @@ resource "aws_security_group" "aap_sg" {
   description = "AAP lab security group"
   vpc_id      = aws_vpc.aap_vpc.id
 
+  # SSH access from your current public IP
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["192.168.56.106/32"] # <-- your control machine public IP
+    cidr_blocks = ["YOUR_CURRENT_PUBLIC_IP/32"]
   }
 
   ingress {
@@ -138,10 +139,10 @@ locals {
 resource "aws_instance" "instances" {
   for_each                   = local.instances
   ami                        = var.ami_rhel9
-  instance_type              = each.value.type
-  subnet_id                  = aws_subnet.aap_subnet.id
-  key_name                   = aws_key_pair.aap_keypair.key_name
-  vpc_security_group_ids     = [aws_security_group.aap_sg.id]
+  instance_type               = each.value.type
+  subnet_id                   = aws_subnet.aap_subnet.id
+  key_name                    = aws_key_pair.aap_keypair.key_name
+  vpc_security_group_ids      = [aws_security_group.aap_sg.id]
   associate_public_ip_address = true
 
   root_block_device {
