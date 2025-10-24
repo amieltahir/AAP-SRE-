@@ -207,3 +207,41 @@ ssh  ec2-user@hub01 "sudo -n true && echo OK || echo FAIL"
 ssh  ec2-user@db01 "sudo -n true && echo OK || echo FAIL"
 
 
+----
+checking port 80 and 443 are accessible
+
+aws ec2 describe-security-groups \
+    --group-ids sg-0ec2870ef0ce830cd \
+    --query 'SecurityGroups[].IpPermissions[?FromPort!=`null` && (FromPort==`80` || FromPort==`443`)]' \
+    --output json
+[
+    [
+        {
+            "IpProtocol": "tcp",
+            "FromPort": 80,
+            "ToPort": 80,
+            "UserIdGroupPairs": [],
+            "IpRanges": [
+                {
+                    "CidrIp": "0.0.0.0/0"
+                }
+            ],
+            "Ipv6Ranges": [],
+            "PrefixListIds": []
+        },
+        {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "UserIdGroupPairs": [],
+            "IpRanges": [
+                {
+                    "CidrIp": "0.0.0.0/0"
+                }
+            ],
+            "Ipv6Ranges": [],
+            "PrefixListIds": []
+        }
+    ]
+]
+
