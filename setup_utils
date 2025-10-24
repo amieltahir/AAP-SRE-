@@ -197,3 +197,13 @@ hub01                      : ok=1    changed=0    unreachable=0    failed=0    s
 cp ~/aap_lab/terraform/key.pem ~/aap_lab/ansible/key.pem
 chmod 600 ~/aap_lab/ansible/key.pem
 
+---------------------------
+
+sudo checks
+
+ssh  ec2-user@controller01 "sudo -n true && echo OK || echo FAIL"
+ssh  ec2-user@exec01 "sudo -n true && echo OK || echo FAIL"
+ssh  ec2-user@hub01 "sudo -n true && echo OK || echo FAIL"
+ssh  ec2-user@db01 "sudo -n true && echo OK || echo FAIL"
+
+
