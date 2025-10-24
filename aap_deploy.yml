@@ -52,7 +52,7 @@
         state: enabled
         immediate: yes
       loop: "{{ node_ports[inventory_hostname] }}"
-    
+
     - name: Create cert directory
       ansible.builtin.file:
         path: "{{ cert_dir }}"
@@ -60,7 +60,7 @@
         mode: '0755'
 
     - name: Generate self-signed certificate
-      community.crypto.openssl_certificate:
+      community.crypto.x509_certificate:
         path: "{{ cert_dir }}/{{ inventory_hostname }}.crt"
         privatekey_path: "{{ cert_dir }}/{{ inventory_hostname }}.key"
         common_name: "{{ inventory_hostname }}.{{ domain }}"
