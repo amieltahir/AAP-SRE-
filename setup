@@ -37,3 +37,7 @@ aws sts get-caller-identity
 
 
 ####################################
+
+after we prepared files in terraform now we execute 
+
+terraform init
