@@ -86,11 +86,11 @@ resource "local_file" "aap_key_pem" {
 
 # --- EC2 Instances ---
 resource "aws_instance" "controller01" {
-  ami             = var.ami_rhel9
-  instance_type   = "t3.medium"
-  subnet_id       = aws_subnet.aap_subnet.id
-  key_name        = aws_key_pair.aap_keypair.key_name
-  vpc_security_group_ids = [aws_security_group.aap_sg.name]
+  ami                    = var.ami_rhel9
+  instance_type          = "t3.medium"
+  subnet_id              = aws_subnet.aap_subnet.id
+  key_name               = aws_key_pair.aap_keypair.key_name
+  vpc_security_group_ids = [aws_security_group.aap_sg.id]
 
   root_block_device {
     volume_size = 40
@@ -101,11 +101,11 @@ resource "aws_instance" "controller01" {
 }
 
 resource "aws_instance" "hub01" {
-  ami             = var.ami_rhel9
-  instance_type   = "t3.small"
-  subnet_id       = aws_subnet.aap_subnet.id
-  key_name        = aws_key_pair.aap_keypair.key_name
-  vpc_security_group_ids = [aws_security_group.aap_sg.name]
+  ami                    = var.ami_rhel9
+  instance_type          = "t3.small"
+  subnet_id              = aws_subnet.aap_subnet.id
+  key_name               = aws_key_pair.aap_keypair.key_name
+  vpc_security_group_ids = [aws_security_group.aap_sg.id]
 
   root_block_device {
     volume_size = 20
@@ -116,11 +116,11 @@ resource "aws_instance" "hub01" {
 }
 
 resource "aws_instance" "exec01" {
-  ami             = var.ami_rhel9
-  instance_type   = "t3.small"
-  subnet_id       = aws_subnet.aap_subnet.id
-  key_name        = aws_key_pair.aap_keypair.key_name
-  vpc_security_group_ids = [aws_security_group.aap_sg.name]
+  ami                    = var.ami_rhel9
+  instance_type          = "t3.small"
+  subnet_id              = aws_subnet.aap_subnet.id
+  key_name               = aws_key_pair.aap_keypair.key_name
+  vpc_security_group_ids = [aws_security_group.aap_sg.id]
 
   root_block_device {
     volume_size = 20
@@ -131,11 +131,11 @@ resource "aws_instance" "exec01" {
 }
 
 resource "aws_instance" "db01" {
-  ami             = var.ami_rhel9
-  instance_type   = "t3.small"
-  subnet_id       = aws_subnet.aap_subnet.id
-  key_name        = aws_key_pair.aap_keypair.key_name
-  vpc_security_group_ids = [aws_security_group.aap_sg.name]
+  ami                    = var.ami_rhel9
+  instance_type          = "t3.small"
+  subnet_id              = aws_subnet.aap_subnet.id
+  key_name               = aws_key_pair.aap_keypair.key_name
+  vpc_security_group_ids = [aws_security_group.aap_sg.id]
 
   root_block_device {
     volume_size = 30
@@ -144,4 +144,3 @@ resource "aws_instance" "db01" {
 
   tags = { Name = "db01.techroute.io" }
 }
-
