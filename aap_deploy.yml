@@ -1,20 +1,21 @@
+# ---------------------------------------------
+# Lab setup for AAP 2.4 with self-signed SSL
+# ---------------------------------------------
 ---
 - name: Lab setup for AAP 2.4 with self-signed SSL
   hosts: all
   become: yes
   vars:
     domain: "techroute.io"
-    cert_dir: "/etc/ssl/techroute"
+    cert_dir: "/etc/pki/tls"
     cert_validity_days: 365
 
-    # Hostnames mapping
     hostnames_map:
       controller01: 44.211.154.206
       exec01: 54.235.63.132
       hub01: 34.226.247.17
       db01: 18.208.160.139
 
-    # Required ports depending on node type
     node_ports:
       controller01: [22, 80, 443]
       hub01: [22, 80, 443]
@@ -22,7 +23,6 @@
       db01: [22, 5432]
 
   tasks:
-
     - name: Set hostnames
       ansible.builtin.hostname:
         name: "{{ inventory_hostname }}"
@@ -53,68 +53,107 @@
         immediate: yes
       loop: "{{ node_ports[inventory_hostname] }}"
 
-    - name: Create cert directory
+    - name: Ensure cert directories exist
       ansible.builtin.file:
-        path: "{{ cert_dir }}"
+        path: "{{ item }}"
         state: directory
+        owner: root
+        group: root
         mode: '0755'
+      loop:
+        - "{{ cert_dir }}/certs"
+        - "{{ cert_dir }}/private"
 
-    - name: Generate self-signed certificate
-      community.crypto.x509_certificate:
-        path: "{{ cert_dir }}/{{ inventory_hostname }}.crt"
-        privatekey_path: "{{ cert_dir }}/{{ inventory_hostname }}.key"
-        common_name: "{{ inventory_hostname }}.{{ domain }}"
-        provider: selfsigned
-        days: "{{ cert_validity_days }}"
+    # ---------------------------------------------
+    # Ensure Python, pip, and cryptography with CA bundle
+    # ---------------------------------------------
+    - name: Ensure python3 is installed
+      dnf:
+        name: python3
+        state: present
+
+    - name: Ensure python3-pip is installed
+      dnf:
+        name: python3-pip
+        state: present
+
+    - name: Ensure CA certificates are installed
+      dnf:
+        name: ca-certificates
+        state: present
+
+    - name: Enable system CA trust
+      command: update-ca-trust force-enable
+
+    - name: Ensure /etc/pki/tls/certs/ca-bundle.crt exists
+      file:
+        path: /etc/pki/tls/certs/ca-bundle.crt
+        state: touch
+        mode: '0644'
+
+    - name: Upgrade pip, setuptools, wheel using system CA bundle
+      command: python3 -m pip install --upgrade pip setuptools wheel
+      environment:
+        SSL_CERT_FILE: /etc/pki/tls/certs/ca-bundle.crt
+
+    - name: Install cryptography library securely
+      command: python3 -m pip install cryptography
+      environment:
+        SSL_CERT_FILE: /etc/pki/tls/certs/ca-bundle.crt
+
+    # ---------------------------------------------
+    # Self-signed certificate generation
+    # ---------------------------------------------
+    - name: Generate private key for certificate
+      community.crypto.openssl_privatekey:
+        path: "{{ cert_dir }}/private/{{ inventory_hostname }}.key"
+        size: 2048
+        type: RSA
+        mode: '0600'
+        owner: root
+        group: root
+
+    - name: Generate CSR with SANs
+      community.crypto.openssl_csr:
+        path: "{{ cert_dir }}/certs/{{ inventory_hostname }}.csr"
+        privatekey_path: "{{ cert_dir }}/private/{{ inventory_hostname }}.key"
+        common_name: "{{ inventory_hostname }}"
+        subject_alt_name:
+          - "DNS:{{ inventory_hostname }}"
+          - "DNS:localhost"
+          - "IP:127.0.0.1"
         attributes:
-          organizationalUnitName: "TRS Lab"
           organizationName: "Technology Route Systems"
-          localityName: "Toronto"
-          stateOrProvinceName: "Ontario"
-          countryName: "CA"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Generate self-signed certificate from CSR
+      community.crypto.x509_certificate:
+        path: "{{ cert_dir }}/certs/{{ inventory_hostname }}.crt"
+        privatekey_path: "{{ cert_dir }}/private/{{ inventory_hostname }}.key"
+        csr_path: "{{ cert_dir }}/certs/{{ inventory_hostname }}.csr"
+        provider: selfsigned
+        selfsigned_version: 3
+        selfsigned_digest: sha256
+        selfsigned_create_subject_key_identifier: create_if_not_provided
+        selfsigned_not_after: "+{{ cert_validity_days }}d"
+        selfsigned_not_before: "+0s"
+        owner: root
+        group: root
+        mode: '0644'
 
     - name: Ensure key and cert are readable only by root
       ansible.builtin.file:
         path: "{{ item }}"
         mode: '0600'
       loop:
-        - "{{ cert_dir }}/{{ inventory_hostname }}.crt"
-        - "{{ cert_dir }}/{{ inventory_hostname }}.key"
+        - "{{ cert_dir }}/certs/{{ inventory_hostname }}.crt"
+        - "{{ cert_dir }}/private/{{ inventory_hostname }}.key"
 
-- name: Distribute certs and keys to AAP nodes
-  hosts: localhost
-  gather_facts: false
-  vars:
-    cert_dir: "/etc/ssl/techroute"
-  tasks:
-    - name: Copy SSL certs to all nodes
-      ansible.builtin.copy:
-        src: "{{ cert_dir }}/{{ item }}.crt"
-        dest: "{{ cert_dir }}/{{ item }}.crt"
-        owner: root
-        group: root
-        mode: '0600'
-      loop:
-        - controller01
-        - exec01
-        - hub01
-        - db01
-      delegate_to: "{{ item }}"
-
-    - name: Copy SSL private keys to all nodes
-      ansible.builtin.copy:
-        src: "{{ cert_dir }}/{{ item }}.key"
-        dest: "{{ cert_dir }}/{{ item }}.key"
-        owner: root
-        group: root
-        mode: '0600'
-      loop:
-        - controller01
-        - exec01
-        - hub01
-        - db01
-      delegate_to: "{{ item }}"
-
+# ---------------------------------------------
+# Pre-deploy port checks
+# ---------------------------------------------
 - name: Pre-deploy port checks
   hosts: all
   become: yes
@@ -138,35 +177,56 @@
         msg: "Some required ports are not open on {{ inventory_hostname }}!"
       when: port_check.rc != 0
 
+# ---------------------------------------------
+# Deploy AAP 2.4 in pyenv virtualenv
+# ---------------------------------------------
 - name: Deploy Ansible Automation Platform 2.4
   hosts: localhost
   gather_facts: false
   vars_files:
     - secrets.yml
-
   vars:
     inventory_file: "{{ playbook_dir }}/inventory.yml"
-    setup_dir: "{{ playbook_dir }}/2.4_rhel9/ansible-automation-platform-setup-bundle-2.4-13.4-x86_64"
+    setup_dir: "/home/trsadmin/aap_lab/2.4_rhel9/ansible-automation-platform-setup-bundle-2.4-13.4-x86_64"
     ansible_collections_path: "{{ setup_dir }}/collections"
-    cert_dir: "/etc/ssl/techroute"
+    cert_dir: "{{ cert_dir }}"
+    pyenv_path: "/home/trsadmin/.pyenv"
 
   tasks:
-
     - name: Ensure AAP setup directory exists
       ansible.builtin.file:
         path: "{{ setup_dir }}"
         state: directory
 
-    - name: Run AAP setup installer with SSL paths
-      ansible.builtin.command: >
-        ./setup.sh
-        -i {{ inventory_file }}
-        -e admin_password={{ admin_password }}
-        -e pg_password={{ pg_password }}
-        -e web_server_ssl_cert={{ cert_dir }}/controller01.crt
-        -e web_server_ssl_key={{ cert_dir }}/controller01.key
-        -e automationhub_ssl_cert={{ cert_dir }}/hub01.crt
-        -e automationhub_ssl_key={{ cert_dir }}/hub01.key
+    - name: Install pyenv if missing
+      ansible.builtin.shell: curl https://pyenv.run | bash
+      args:
+        creates: "{{ pyenv_path }}"
+
+    - name: Install Python 3.10 in pyenv
+      ansible.builtin.shell: "{{ pyenv_path }}/bin/pyenv install -s 3.10.13"
+      environment:
+        PYENV_ROOT: "{{ pyenv_path }}"
+        PATH: "{{ pyenv_path }}/bin:{{ pyenv_path }}/shims:{{ ansible_env.PATH }}"
+
+    - name: Create pyenv virtualenv for AAP
+      ansible.builtin.shell: "{{ pyenv_path }}/bin/pyenv virtualenv -f 3.10.13 aap-env"
+      environment:
+        PYENV_ROOT: "{{ pyenv_path }}"
+        PATH: "{{ pyenv_path }}/bin:{{ pyenv_path }}/shims:{{ ansible_env.PATH }}"
+      args:
+        creates: "{{ pyenv_path }}/versions/aap-env"
+
+    - name: Run AAP setup installer inside pyenv virtualenv
+      ansible.builtin.shell: |
+        source {{ pyenv_path }}/versions/aap-env/bin/activate \
+        && ./setup.sh -i {{ inventory_file }} \
+           -e admin_password={{ admin_password }} \
+           -e pg_password={{ pg_password }} \
+           -e web_server_ssl_cert={{ cert_dir }}/certs/controller01.crt \
+           -e web_server_ssl_key={{ cert_dir }}/private/controller01.key \
+           -e automationhub_ssl_cert={{ cert_dir }}/certs/hub01.crt \
+           -e automationhub_ssl_key={{ cert_dir }}/private/hub01.key
       args:
         chdir: "{{ setup_dir }}"
       environment:
@@ -174,43 +234,21 @@
         ANSIBLE_ERROR_ON_UNDEFINED_VARS: "True"
         ANSIBLE_COLLECTIONS_PATH: "{{ ansible_collections_path }}"
       register: setup_result
-      ignore_errors: false
 
     - name: Print AAP setup logs
       ansible.builtin.debug:
         var: setup_result.stdout_lines
 
+# ---------------------------------------------
+# Post-deploy health checks
+# ---------------------------------------------
 - name: Post-deploy health checks
-  hosts: localhost
-  gather_facts: false
+  hosts: all
+  become: no
   tasks:
-    - name: Check Controller HTTPS
-      ansible.builtin.uri:
-        url: "https://controller01.techroute.io:443"
-        method: GET
-        validate_certs: no
-        return_content: no
-      register: controller_health
-      retries: 5
-      delay: 10
-      until: controller_health.status == 200
+    - name: Wait for port 443 on controller01
+      ansible.builtin.wait_for:
+        host: controller01
+        port: 443
+        timeout: 30
 
-    - name: Check Hub HTTPS
-      ansible.builtin.uri:
-        url: "https://hub01.techroute.io:443"
-        method: GET
-        validate_certs: no
-        return_content: no
-      register: hub_health
-      retries: 5
-      delay: 10
-      until: hub_health.status == 200
-
-    - name: Check DB port 5432 externally
-      ansible.builtin.shell: nc -zvw3 db01.techroute.io 5432
-      register: db_health
-      ignore_errors: yes
-
-    - name: Print DB health check
-      ansible.builtin.debug:
-        var: db_health.stdout_lines
