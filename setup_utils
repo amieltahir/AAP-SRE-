@@ -268,9 +268,10 @@ ansible --version
 _----------------
 
 ansible -i ~/aap_lab/ansible/inventory.yml all -m file -a "path=/etc/pki/tls/certs state=absent" -b
+ansible -i ~/aap_lab/ansible/inventory.yml all -m file -a "path=/etc/pki/tls/private state=absent" -b
 
 # Kill all SSH control processes and clean sockets
 pkill -f 'ssh.*ControlMaster'
 rm -f ~/.ssh/ansible-* ~/.ssh/ansible_* ~/.ssh/*@*:*
-ansible -i ~/aap_lab/ansible/inventory.yml all -m file -a "path=/etc/pki/tls/private state=absent" -b
+
 
