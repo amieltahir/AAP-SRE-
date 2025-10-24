@@ -31,3 +31,14 @@ Local VM:
 
 Use your simplified inventory and SSH config.
 No --private-key needed since SSH config has the key path.
+
+-------------------
+
+lets store passwords in vaults
+
+ansible-vault create secrets.yml
+
+---
+
+
+
