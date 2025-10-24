@@ -33,7 +33,7 @@ export AWS_DEFAULT_REGION="us-east-1"
 add in end of file 
  vi ~/.bashrc
  source ~/.bashrc
-aws sts get-caller-identity
+aws sts get-caller-identity 
 
 
 ####################################
