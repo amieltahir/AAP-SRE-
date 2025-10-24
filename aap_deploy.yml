@@ -1,0 +1,171 @@
+---
+- name: Lab setup for AAP 2.4 with self-signed SSL
+  hosts: all
+  become: yes
+  vars:
+    domain: "techroute.io"
+    cert_dir: "/etc/ssl/techroute"
+    cert_validity_days: 365
+
+    # Hostnames mapping
+    hostnames_map:
+      controller01: 44.211.154.206
+      exec01: 54.235.63.132
+      hub01: 34.226.247.17
+      db01: 18.208.160.139
+
+  tasks:
+
+    - name: Set hostnames
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+
+    - name: Update /etc/hosts for local DNS
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        line: "{{ item.value }} {{ item.key }}.{{ domain }}"
+        state: present
+      loop: "{{ hostnames_map|dict2items }}"
+
+    - name: Create cert directory
+      ansible.builtin.file:
+        path: "{{ cert_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Generate self-signed certificate
+      community.crypto.openssl_certificate:
+        path: "{{ cert_dir }}/{{ inventory_hostname }}.crt"
+        privatekey_path: "{{ cert_dir }}/{{ inventory_hostname }}.key"
+        common_name: "{{ inventory_hostname }}.{{ domain }}"
+        provider: selfsigned
+        days: "{{ cert_validity_days }}"
+        attributes:
+          organizationalUnitName: "TRS Lab"
+          organizationName: "Technology Route Systems"
+          localityName: "Toronto"
+          stateOrProvinceName: "Ontario"
+          countryName: "CA"
+
+    - name: Ensure key and cert are readable only by root
+      ansible.builtin.file:
+        path: "{{ item }}"
+        mode: '0600'
+      loop:
+        - "{{ cert_dir }}/{{ inventory_hostname }}.crt"
+        - "{{ cert_dir }}/{{ inventory_hostname }}.key"
+
+- name: Distribute certs and keys to AAP nodes
+  hosts: localhost
+  gather_facts: false
+  vars:
+    cert_dir: "/etc/ssl/techroute"
+  tasks:
+    - name: Copy SSL certs to all nodes
+      ansible.builtin.copy:
+        src: "{{ cert_dir }}/{{ item }}.crt"
+        dest: "{{ cert_dir }}/{{ item }}.crt"
+        owner: root
+        group: root
+        mode: '0600'
+      loop:
+        - controller01
+        - exec01
+        - hub01
+        - db01
+      delegate_to: "{{ item }}"
+
+    - name: Copy SSL private keys to all nodes
+      ansible.builtin.copy:
+        src: "{{ cert_dir }}/{{ item }}.key"
+        dest: "{{ cert_dir }}/{{ item }}.key"
+        owner: root
+        group: root
+        mode: '0600'
+      loop:
+        - controller01
+        - exec01
+        - hub01
+        - db01
+      delegate_to: "{{ item }}"
+
+- name: Deploy Ansible Automation Platform 2.4
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - secrets.yml
+
+  vars:
+    inventory_file: "{{ playbook_dir }}/inventory.yml"
+    setup_dir: "{{ playbook_dir }}/2.4_rhel9/ansible-automation-platform-setup-bundle-2.4-13.4-x86_64"
+    ansible_collections_path: "{{ setup_dir }}/collections"
+    cert_dir: "/etc/ssl/techroute"
+
+  tasks:
+
+    - name: Ensure AAP setup directory exists
+      ansible.builtin.file:
+        path: "{{ setup_dir }}"
+        state: directory
+
+    - name: Run AAP setup installer with SSL paths
+      ansible.builtin.command: >
+        ./setup.sh
+        -i {{ inventory_file }}
+        -e admin_password={{ admin_password }}
+        -e pg_password={{ pg_password }}
+        -e web_server_ssl_cert={{ cert_dir }}/controller01.crt
+        -e web_server_ssl_key={{ cert_dir }}/controller01.key
+        -e automationhub_ssl_cert={{ cert_dir }}/hub01.crt
+        -e automationhub_ssl_key={{ cert_dir }}/hub01.key
+      args:
+        chdir: "{{ setup_dir }}"
+      environment:
+        ANSIBLE_FORCE_COLOR: "True"
+        ANSIBLE_ERROR_ON_UNDEFINED_VARS: "True"
+        ANSIBLE_COLLECTIONS_PATH: "{{ ansible_collections_path }}"
+      register: setup_result
+      ignore_errors: false
+
+    - name: Print AAP setup logs
+      ansible.builtin.debug:
+        var: setup_result.stdout_lines
+
+- name: Post-deploy health checks for AAP 2.4
+  hosts: localhost
+  gather_facts: false
+  vars:
+    domain: "techroute.io"
+    controller_url: "https://controller01.{{ domain }}"
+    hub_url: "https://hub01.{{ domain }}"
+  tasks:
+
+    - name: Check Automation Controller is reachable
+      ansible.builtin.uri:
+        url: "{{ controller_url }}"
+        method: GET
+        validate_certs: false
+        status_code: 200
+      register: controller_health
+      retries: 5
+      delay: 10
+      until: controller_health.status == 200
+
+    - name: Print Controller health check result
+      ansible.builtin.debug:
+        var: controller_health
+
+    - name: Check Automation Hub is reachable
+      ansible.builtin.uri:
+        url: "{{ hub_url }}"
+        method: GET
+        validate_certs: false
+        status_code: 200
+      register: hub_health
+      retries: 5
+      delay: 10
+      until: hub_health.status == 200
+
+    - name: Print Hub health check result
+      ansible.builtin.debug:
+        var: hub_health
