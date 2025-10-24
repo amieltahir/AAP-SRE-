@@ -36,6 +36,8 @@ add in end of file
 aws sts get-caller-identity 
 
 
+
+
 ####################################
 
 after we prepared files in terraform now we execute 
@@ -278,5 +280,19 @@ rm -f ~/.ssh/ansible-* ~/.ssh/ansible_* ~/.ssh/*@*:*
 
 ansible-playbook -i inventory deploy_aap.yml --ask-vault-pass --start-at-task="Run AAP setup directly"
 
+---
 
+./setup.sh -i inventory.yml \
+  -e admin_password="Cloud@454" \
+  -e pg_password="Cloud@454" \
+  -e web_server_ssl_cert="/etc/pki/tls/certs/controller01.crt" \
+  -e web_server_ssl_key="/etc/pki/tls/private/controller01.key" \
+  -e automationhub_ssl_cert="/etc/pki/tls/certs/hub01.crt" \
+  -e automationhub_ssl_key="/etc/pki/tls/private/hub01.key" \
+  -e bundle_install=true \
+  -e skip_subscription_manager_check=true \
+  -e skip_ram_check=true \
+  -e registry_username="dummy" \
+  -e registry_password="dummy" \
+  -e _ee_from_bundle=true
 
