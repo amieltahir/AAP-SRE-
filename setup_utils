@@ -244,4 +244,6 @@ aws ec2 describe-security-groups \
         }
     ]
 ]
+----
 
+ansible-galaxy collection install community.crypto --upgrade
