@@ -70,4 +70,37 @@ commands will detect it and remind you to do so if necessary.
 ----
 
 terraform plan
-terraform apply
+terraform apply -auto-approve
+
+---
+
+curl https://checkip.amazonaws.com
+
+
+aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$(terraform output -raw vpc_id)" --query "RouteTables[].Routes"
+[
+    [
+        {
+            "DestinationCidrBlock": "10.10.0.0/16",
+            "GatewayId": "local",
+            "Origin": "CreateRouteTable",
+            "State": "active"
+        },
+        {
+            "DestinationCidrBlock": "0.0.0.0/0",
+            "GatewayId": "igw-0226e1e865f07cacb",
+            "Origin": "CreateRoute",
+            "State": "active"
+        }
+    ],
+    [
+        {
+            "DestinationCidrBlock": "10.10.0.0/16",
+            "GatewayId": "local",
+            "Origin": "CreateRouteTable",
+            "State": "active"
+        }
+    ]
+]
+
+
