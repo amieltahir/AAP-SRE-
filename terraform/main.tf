@@ -26,7 +26,7 @@ resource "aws_security_group" "aap_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["<YOUR_TRS_CORE_IP>/32"]
+    cidr_blocks = ["192.168.56.106/32"]
   }
 
   ingress {
