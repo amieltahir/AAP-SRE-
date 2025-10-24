@@ -274,4 +274,9 @@ ansible -i ~/aap_lab/ansible/inventory.yml all -m file -a "path=/etc/pki/tls/pri
 pkill -f 'ssh.*ControlMaster'
 rm -f ~/.ssh/ansible-* ~/.ssh/ansible_* ~/.ssh/*@*:*
 
+--------
+
+ansible-playbook -i inventory deploy_aap.yml --ask-vault-pass --start-at-task="Run AAP setup directly"
+
+
 
