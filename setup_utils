@@ -247,3 +247,22 @@ aws ec2 describe-security-groups \
 ----
 
 ansible-galaxy collection install community.crypto --upgrade
+
+sudo apt install -y python3-pip
+sudo apt install -y python-is-python3
+python --version  # Should show Python 3.13.3
+
+sudo apt install -y build-essential libssl-dev zlib1g-dev libbz2-dev \
+libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev \
+libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev git
+
+curl https://pyenv.run | bash
+
+export PATH="$HOME/.pyenv/bin:$PATH"
+eval "$(pyenv init --path)"
+eval "$(pyenv virtualenv-init -)"
+
+pip install --upgrade pip
+pip install ansible-core==2.14
+ansible --version
+
