@@ -265,4 +265,8 @@ eval "$(pyenv virtualenv-init -)"
 pip install --upgrade pip
 pip install ansible-core==2.14
 ansible --version
+_----------------
+
+ansible -i ~/aap_lab/ansible/inventory.yml all -m file -a "path=/etc/pki/tls/certs state=absent" -b
+ansible -i ~/aap_lab/ansible/inventory.yml all -m file -a "path=/etc/pki/tls/private state=absent" -b
 
