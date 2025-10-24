@@ -6,6 +6,11 @@
     domain: "techroute.io"
     cert_dir: "/etc/ssl/techroute"
     cert_validity_days: 365
+    required_ports:
+      - 22
+      - 80
+      - 443
+      - 5432
 
     # Hostnames mapping
     hostnames_map:
@@ -26,6 +31,45 @@
         line: "{{ item.value }} {{ item.key }}.{{ domain }}"
         state: present
       loop: "{{ hostnames_map|dict2items }}"
+
+    - name: Install firewalld on RHEL 9 nodes
+      ansible.builtin.yum:
+        name: firewalld
+        state: present
+      when: ansible_facts['os_family'] == 'RedHat'
+
+    - name: Ensure firewalld is enabled and running
+      ansible.builtin.service:
+        name: firewalld
+        state: started
+        enabled: yes
+      when: ansible_facts['os_family'] == 'RedHat'
+
+    - name: Ensure required ports are allowed in firewalld
+      ansible.builtin.firewalld:
+        port: "{{ item }}/tcp"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      loop: "{{ required_ports }}"
+      when: ansible_facts['os_family'] == 'RedHat'
+
+    - name: Check if required ports are open on host
+      ansible.builtin.shell: |
+        for port in {{ required_ports | join(' ') }}; do
+            nc -zvw3 127.0.0.1 $port
+        done
+      register: port_check
+      ignore_errors: yes
+
+    - name: Print port check results
+      ansible.builtin.debug:
+        var: port_check.stdout_lines
+
+    - name: Warn if ports are not open
+      ansible.builtin.fail:
+        msg: "Some required ports (22, 80, 443, 5432) are not open on {{ inventory_hostname }}!"
+      when: port_check.rc != 0
 
     - name: Create cert directory
       ansible.builtin.file:
@@ -94,7 +138,6 @@
   gather_facts: false
   vars_files:
     - secrets.yml
-
   vars:
     inventory_file: "{{ playbook_dir }}/inventory.yml"
     setup_dir: "{{ playbook_dir }}/2.4_rhel9/ansible-automation-platform-setup-bundle-2.4-13.4-x86_64"
@@ -131,41 +174,30 @@
       ansible.builtin.debug:
         var: setup_result.stdout_lines
 
-- name: Post-deploy health checks for AAP 2.4
-  hosts: localhost
-  gather_facts: false
-  vars:
-    domain: "techroute.io"
-    controller_url: "https://controller01.{{ domain }}"
-    hub_url: "https://hub01.{{ domain }}"
-  tasks:
-
-    - name: Check Automation Controller is reachable
+    - name: Post-deploy health check - Controller
       ansible.builtin.uri:
-        url: "{{ controller_url }}"
+        url: "https://controller01.techroute.io:443"
         method: GET
-        validate_certs: false
-        status_code: 200
+        validate_certs: no
+        return_content: no
       register: controller_health
       retries: 5
       delay: 10
       until: controller_health.status == 200
 
-    - name: Print Controller health check result
-      ansible.builtin.debug:
-        var: controller_health
-
-    - name: Check Automation Hub is reachable
+    - name: Post-deploy health check - Hub
       ansible.builtin.uri:
-        url: "{{ hub_url }}"
+        url: "https://hub01.techroute.io:443"
         method: GET
-        validate_certs: false
-        status_code: 200
+        validate_certs: no
+        return_content: no
       register: hub_health
       retries: 5
       delay: 10
       until: hub_health.status == 200
 
-    - name: Print Hub health check result
+    - name: Print health check results
       ansible.builtin.debug:
-        var: hub_health
+        msg:
+          - "Controller Health: {{ controller_health.status }}"
+          - "Hub Health: {{ hub_health.status }}"
