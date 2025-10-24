@@ -12,3 +12,28 @@ echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://
 sudo apt-get update -y
 sudo apt-get install -y terraform
 ####################################
+
+### #################install aws-cli ##########
+
+sudo apt-get install -y unzip
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+aws --version
+aws configure
+
+stored in 
+~/.aws/credentials
+~/.aws/config
+
+export AWS_ACCESS_KEY_ID="YOUR_ACCESS_KEY"
+export AWS_SECRET_ACCESS_KEY="YOUR_SECRET_KEY"
+export AWS_DEFAULT_REGION="us-east-1"
+
+add in end of file 
+ vi ~/.bashrc
+ source ~/.bashrc
+aws sts get-caller-identity
+
+
+####################################
