@@ -90,7 +90,7 @@ resource "aws_instance" "controller01" {
   instance_type   = "t3.medium"
   subnet_id       = aws_subnet.aap_subnet.id
   key_name        = aws_key_pair.aap_keypair.key_name
-  security_groups = [aws_security_group.aap_sg.name]
+  vpc_security_group_ids = [aws_security_group.aap_sg.name]
 
   root_block_device {
     volume_size = 40
@@ -105,7 +105,7 @@ resource "aws_instance" "hub01" {
   instance_type   = "t3.small"
   subnet_id       = aws_subnet.aap_subnet.id
   key_name        = aws_key_pair.aap_keypair.key_name
-  security_groups = [aws_security_group.aap_sg.name]
+  vpc_security_group_ids = [aws_security_group.aap_sg.name]
 
   root_block_device {
     volume_size = 20
@@ -120,7 +120,7 @@ resource "aws_instance" "exec01" {
   instance_type   = "t3.small"
   subnet_id       = aws_subnet.aap_subnet.id
   key_name        = aws_key_pair.aap_keypair.key_name
-  security_groups = [aws_security_group.aap_sg.name]
+  vpc_security_group_ids = [aws_security_group.aap_sg.name]
 
   root_block_device {
     volume_size = 20
@@ -135,7 +135,7 @@ resource "aws_instance" "db01" {
   instance_type   = "t3.small"
   subnet_id       = aws_subnet.aap_subnet.id
   key_name        = aws_key_pair.aap_keypair.key_name
-  security_groups = [aws_security_group.aap_sg.name]
+  vpc_security_group_ids = [aws_security_group.aap_sg.name]
 
   root_block_device {
     volume_size = 30
@@ -144,3 +144,4 @@ resource "aws_instance" "db01" {
 
   tags = { Name = "db01.techroute.io" }
 }
+
