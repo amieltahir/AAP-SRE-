@@ -10,10 +10,11 @@ resource "aws_vpc" "aap_vpc" {
 
 # --- Subnet ---
 resource "aws_subnet" "aap_subnet" {
-  vpc_id            = aws_vpc.aap_vpc.id
-  cidr_block        = "10.10.1.0/24"
-  availability_zone = "${var.aws_region}a"
-  tags              = { Name = "AAP_Subnet" }
+  vpc_id                   = aws_vpc.aap_vpc.id
+  cidr_block               = "10.10.1.0/24"
+  availability_zone        = "${var.aws_region}a"
+  map_public_ip_on_launch  = true  # <-- ensures public IPs
+  tags                     = { Name = "AAP_Subnet" }
 }
 
 # --- Security Group ---
@@ -85,62 +86,29 @@ resource "local_file" "aap_key_pem" {
 }
 
 # --- EC2 Instances ---
-resource "aws_instance" "controller01" {
-  ami                    = var.ami_rhel9
-  instance_type          = "t3.medium"
-  subnet_id              = aws_subnet.aap_subnet.id
-  key_name               = aws_key_pair.aap_keypair.key_name
-  vpc_security_group_ids = [aws_security_group.aap_sg.id]
+locals {
+  instances = {
+    controller01 = { type = "t3.medium", volume = 40 }
+    hub01        = { type = "t3.small",  volume = 20 }
+    exec01       = { type = "t3.small",  volume = 20 }
+    db01         = { type = "t3.small",  volume = 30 }
+  }
+}
+
+resource "aws_instance" "instances" {
+  for_each                 = local.instances
+  ami                       = var.ami_rhel9
+  instance_type             = each.value.type
+  subnet_id                 = aws_subnet.aap_subnet.id
+  key_name                  = aws_key_pair.aap_keypair.key_name
+  vpc_security_group_ids     = [aws_security_group.aap_sg.id]
+  associate_public_ip_address = true  # <-- ensures public IP
 
   root_block_device {
-    volume_size = 40
+    volume_size = each.value.volume
     volume_type = "gp3"
   }
 
-  tags = { Name = "controller01.techroute.io" }
+  tags = { Name = "${each.key}.techroute.io" }
 }
 
-resource "aws_instance" "hub01" {
-  ami                    = var.ami_rhel9
-  instance_type          = "t3.small"
-  subnet_id              = aws_subnet.aap_subnet.id
-  key_name               = aws_key_pair.aap_keypair.key_name
-  vpc_security_group_ids = [aws_security_group.aap_sg.id]
-
-  root_block_device {
-    volume_size = 20
-    volume_type = "gp3"
-  }
-
-  tags = { Name = "hub01.techroute.io" }
-}
-
-resource "aws_instance" "exec01" {
-  ami                    = var.ami_rhel9
-  instance_type          = "t3.small"
-  subnet_id              = aws_subnet.aap_subnet.id
-  key_name               = aws_key_pair.aap_keypair.key_name
-  vpc_security_group_ids = [aws_security_group.aap_sg.id]
-
-  root_block_device {
-    volume_size = 20
-    volume_type = "gp3"
-  }
-
-  tags = { Name = "exec01.techroute.io" }
-}
-
-resource "aws_instance" "db01" {
-  ami                    = var.ami_rhel9
-  instance_type          = "t3.small"
-  subnet_id              = aws_subnet.aap_subnet.id
-  key_name               = aws_key_pair.aap_keypair.key_name
-  vpc_security_group_ids = [aws_security_group.aap_sg.id]
-
-  root_block_device {
-    volume_size = 30
-    volume_type = "gp3"
-  }
-
-  tags = { Name = "db01.techroute.io" }
-}
