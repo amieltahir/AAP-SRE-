@@ -6,11 +6,6 @@
     domain: "techroute.io"
     cert_dir: "/etc/ssl/techroute"
     cert_validity_days: 365
-    required_ports:
-      - 22
-      - 80
-      - 443
-      - 5432
 
     # Hostnames mapping
     hostnames_map:
@@ -18,6 +13,13 @@
       exec01: 54.235.63.132
       hub01: 34.226.247.17
       db01: 18.208.160.139
+
+    # Required ports depending on node type
+    node_ports:
+      controller01: [22, 80, 443]
+      hub01: [22, 80, 443]
+      exec01: [22]
+      db01: [22, 5432]
 
   tasks:
 
@@ -28,49 +30,29 @@
     - name: Update /etc/hosts for local DNS
       ansible.builtin.lineinfile:
         path: /etc/hosts
-        line: "{{ item.value }} {{ item.key }}.{{ domain }}"
+        line: "{{ item.value }} {{ item.key }}.{{ domain }} {{ item.key }}"
         state: present
       loop: "{{ hostnames_map|dict2items }}"
 
-    - name: Install firewalld on RHEL 9 nodes
+    - name: Install firewalld if missing
       ansible.builtin.yum:
         name: firewalld
         state: present
-      when: ansible_facts['os_family'] == 'RedHat'
 
-    - name: Ensure firewalld is enabled and running
+    - name: Ensure firewalld is enabled and started
       ansible.builtin.service:
         name: firewalld
         state: started
         enabled: yes
-      when: ansible_facts['os_family'] == 'RedHat'
 
-    - name: Ensure required ports are allowed in firewalld
-      ansible.builtin.firewalld:
+    - name: Open required ports based on node type
+      ansible.posix.firewalld:
         port: "{{ item }}/tcp"
         permanent: yes
         state: enabled
         immediate: yes
-      loop: "{{ required_ports }}"
-      when: ansible_facts['os_family'] == 'RedHat'
-
-    - name: Check if required ports are open on host
-      ansible.builtin.shell: |
-        for port in {{ required_ports | join(' ') }}; do
-            nc -zvw3 127.0.0.1 $port
-        done
-      register: port_check
-      ignore_errors: yes
-
-    - name: Print port check results
-      ansible.builtin.debug:
-        var: port_check.stdout_lines
-
-    - name: Warn if ports are not open
-      ansible.builtin.fail:
-        msg: "Some required ports (22, 80, 443, 5432) are not open on {{ inventory_hostname }}!"
-      when: port_check.rc != 0
-
+      loop: "{{ node_ports[inventory_hostname] }}"
+    
     - name: Create cert directory
       ansible.builtin.file:
         path: "{{ cert_dir }}"
@@ -133,11 +115,35 @@
         - db01
       delegate_to: "{{ item }}"
 
+- name: Pre-deploy port checks
+  hosts: all
+  become: yes
+  vars:
+    required_ports: "{{ node_ports[inventory_hostname] }}"
+  tasks:
+    - name: Check if required ports are open on host
+      ansible.builtin.shell: |
+        for port in {{ required_ports | join(' ') }}; do
+            nc -zvw3 127.0.0.1 $port
+        done
+      register: port_check
+      ignore_errors: yes
+
+    - name: Print port check results
+      ansible.builtin.debug:
+        var: port_check.stdout_lines
+
+    - name: Warn if ports are not open
+      ansible.builtin.fail:
+        msg: "Some required ports are not open on {{ inventory_hostname }}!"
+      when: port_check.rc != 0
+
 - name: Deploy Ansible Automation Platform 2.4
   hosts: localhost
   gather_facts: false
   vars_files:
     - secrets.yml
+
   vars:
     inventory_file: "{{ playbook_dir }}/inventory.yml"
     setup_dir: "{{ playbook_dir }}/2.4_rhel9/ansible-automation-platform-setup-bundle-2.4-13.4-x86_64"
@@ -174,7 +180,11 @@
       ansible.builtin.debug:
         var: setup_result.stdout_lines
 
-    - name: Post-deploy health check - Controller
+- name: Post-deploy health checks
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Check Controller HTTPS
       ansible.builtin.uri:
         url: "https://controller01.techroute.io:443"
         method: GET
@@ -185,7 +195,7 @@
       delay: 10
       until: controller_health.status == 200
 
-    - name: Post-deploy health check - Hub
+    - name: Check Hub HTTPS
       ansible.builtin.uri:
         url: "https://hub01.techroute.io:443"
         method: GET
@@ -196,8 +206,11 @@
       delay: 10
       until: hub_health.status == 200
 
-    - name: Print health check results
+    - name: Check DB port 5432 externally
+      ansible.builtin.shell: nc -zvw3 db01.techroute.io 5432
+      register: db_health
+      ignore_errors: yes
+
+    - name: Print DB health check
       ansible.builtin.debug:
-        msg:
-          - "Controller Health: {{ controller_health.status }}"
-          - "Hub Health: {{ hub_health.status }}"
+        var: db_health.stdout_lines
