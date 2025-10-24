@@ -69,4 +69,5 @@ commands will detect it and remind you to do so if necessary.
 
 ----
 
-terraform planvi
+terraform plan
+terraform apply
