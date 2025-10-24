@@ -1,23 +1,59 @@
+###########################################
+# Provider
+###########################################
 provider "aws" {
   region = var.aws_region
 }
 
+###########################################
+# Networking
+###########################################
+
 # --- VPC ---
 resource "aws_vpc" "aap_vpc" {
-  cidr_block = "10.10.0.0/16"
-  tags       = { Name = "AAP_VPC" }
+  cidr_block           = "10.10.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
+  tags = { Name = "AAP_VPC" }
 }
 
-# --- Subnet ---
+# --- Internet Gateway ---
+resource "aws_internet_gateway" "aap_igw" {
+  vpc_id = aws_vpc.aap_vpc.id
+  tags   = { Name = "AAP_IGW" }
+}
+
+# --- Subnet (Public) ---
 resource "aws_subnet" "aap_subnet" {
-  vpc_id                   = aws_vpc.aap_vpc.id
-  cidr_block               = "10.10.1.0/24"
-  availability_zone        = "${var.aws_region}a"
-  map_public_ip_on_launch  = true  # <-- ensures public IPs
-  tags                     = { Name = "AAP_Subnet" }
+  vpc_id                  = aws_vpc.aap_vpc.id
+  cidr_block              = "10.10.1.0/24"
+  availability_zone       = "${var.aws_region}a"
+  map_public_ip_on_launch = true
+
+  tags = { Name = "AAP_Public_Subnet" }
 }
 
-# --- Security Group ---
+# --- Route Table + Association ---
+resource "aws_route_table" "aap_public_rt" {
+  vpc_id = aws_vpc.aap_vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.aap_igw.id
+  }
+
+  tags = { Name = "AAP_Public_RT" }
+}
+
+resource "aws_route_table_association" "aap_public_assoc" {
+  subnet_id      = aws_subnet.aap_subnet.id
+  route_table_id = aws_route_table.aap_public_rt.id
+}
+
+###########################################
+# Security Group
+###########################################
 resource "aws_security_group" "aap_sg" {
   name        = "AAP_SG"
   description = "AAP lab security group"
@@ -27,7 +63,7 @@ resource "aws_security_group" "aap_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["192.168.56.106/32"]
+    cidr_blocks = ["192.168.56.106/32"] # <-- your control machine public IP
   }
 
   ingress {
@@ -68,7 +104,9 @@ resource "aws_security_group" "aap_sg" {
   tags = { Name = "AAP_SG" }
 }
 
-# --- Key Pair ---
+###########################################
+# SSH Key
+###########################################
 resource "tls_private_key" "aap_key" {
   algorithm = "RSA"
   rsa_bits  = 2048
@@ -85,7 +123,9 @@ resource "local_file" "aap_key_pem" {
   file_permission = "0600"
 }
 
-# --- EC2 Instances ---
+###########################################
+# EC2 Instances
+###########################################
 locals {
   instances = {
     controller01 = { type = "t3.medium", volume = 40 }
@@ -96,13 +136,13 @@ locals {
 }
 
 resource "aws_instance" "instances" {
-  for_each                 = local.instances
-  ami                       = var.ami_rhel9
-  instance_type             = each.value.type
-  subnet_id                 = aws_subnet.aap_subnet.id
-  key_name                  = aws_key_pair.aap_keypair.key_name
+  for_each                   = local.instances
+  ami                        = var.ami_rhel9
+  instance_type              = each.value.type
+  subnet_id                  = aws_subnet.aap_subnet.id
+  key_name                   = aws_key_pair.aap_keypair.key_name
   vpc_security_group_ids     = [aws_security_group.aap_sg.id]
-  associate_public_ip_address = true  # <-- ensures public IP
+  associate_public_ip_address = true
 
   root_block_device {
     volume_size = each.value.volume
@@ -111,4 +151,3 @@ resource "aws_instance" "instances" {
 
   tags = { Name = "${each.key}.techroute.io" }
 }
-
