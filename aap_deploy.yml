@@ -1,3 +1,4 @@
+
 # ---------------------------------------------
 # Lab setup for AAP 2.4 with self-signed SSL - COMPLETE FIXED VERSION
 # ---------------------------------------------
@@ -588,18 +589,18 @@
           shell: |
             # Force update CA trust
             update-ca-trust extract
-            
+
             # Ensure our certificates are in the bundle
             echo "# Emergency SSL Fix - AAP Installer" >> /etc/pki/tls/certs/ca-bundle.crt
             cat /etc/pki/tls/certs/hub01.crt >> /etc/pki/tls/certs/ca-bundle.crt
             cat /etc/pki/tls/certs/controller01.crt >> /etc/pki/tls/certs/ca-bundle.crt 2>/dev/null || true
-            
+
             # Set environment for ALL users and services
             echo 'REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt' >> /etc/environment
             echo 'SSL_CERT_FILE=/etc/pki/tls/certs/ca-bundle.crt' >> /etc/environment
             echo 'export REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt' >> /etc/bashrc
             echo 'export SSL_CERT_FILE=/etc/pki/tls/certs/ca-bundle.crt' >> /etc/bashrc
-            
+
             # Apply to Pulpcore specifically
             mkdir -p /etc/systemd/system/pulpcore-api.service.d
             cat > /etc/systemd/system/pulpcore-api.service.d/ssl.conf << EOF
@@ -607,13 +608,73 @@
             Environment="REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt"
             Environment="SSL_CERT_FILE=/etc/pki/tls/certs/ca-bundle.crt"
             EOF
-            
+
             # Also apply to all other Pulpcore services
             for service in pulpcore-content pulpcore-worker@1 pulpcore-worker@2 pulpcore-worker@3; do
               mkdir -p /etc/systemd/system/${service}.service.d
               cp /etc/systemd/system/pulpcore-api.service.d/ssl.conf /etc/systemd/system/${service}.service.d/
             done
-            
+
+            # Reload systemd
+            systemctl daemon-reload
+          args:
+            executable: /bin/bash
+
+        - name: Test the SSL fix immediately
+          command: /usr/bin/pulpcore-manager check
+          environment:
+            REQUESTS_CA_BUNDLE: /etc/pki/tls/certs/ca-bundle.crt
+            SSL_CERT_FILE: /etc/pki/tls/certs/ca-bundle.crt
+          register: ssl_test
+          ignore_errors: yes
+
+        - name: Show SSL test result
+          debug:
+            msg: "Emergency SSL fix test: {{ 'SUCCESS' if ssl_test.rc == 0 else 'FAILED' }}"
+
+      when: resume_needed | default(false)
+
+# ---------------------------------------------
+# RESUME AAP INSTALLATION AFTER SSL FIX
+# ---------------------------------------------
+- name:  EMERGENCY SSL FIX - Apply SSL environment to running AAP installer
+  hosts: hub01
+  become: yes
+  vars:
+    ansible_ssh_common_args: '-o ControlMaster=no -o ControlPersist=no'
+  tasks:
+    - name: Apply SSL fix to all Pulpcore services immediately
+      block:
+        - name: Ensure CA bundle is properly configured
+          shell: |
+            # Force update CA trust
+            update-ca-trust extract
+
+            # Ensure our certificates are in the bundle
+            echo "# Emergency SSL Fix - AAP Installer" >> /etc/pki/tls/certs/ca-bundle.crt
+            cat /etc/pki/tls/certs/hub01.crt >> /etc/pki/tls/certs/ca-bundle.crt
+            cat /etc/pki/tls/certs/controller01.crt >> /etc/pki/tls/certs/ca-bundle.crt 2>/dev/null || true
+
+            # Set environment for ALL users and services
+            echo 'REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt' >> /etc/environment
+            echo 'SSL_CERT_FILE=/etc/pki/tls/certs/ca-bundle.crt' >> /etc/environment
+            echo 'export REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt' >> /etc/bashrc
+            echo 'export SSL_CERT_FILE=/etc/pki/tls/certs/ca-bundle.crt' >> /etc/bashrc
+
+            # Apply to Pulpcore specifically
+            mkdir -p /etc/systemd/system/pulpcore-api.service.d
+            cat > /etc/systemd/system/pulpcore-api.service.d/ssl.conf << EOF
+            [Service]
+            Environment="REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt"
+            Environment="SSL_CERT_FILE=/etc/pki/tls/certs/ca-bundle.crt"
+            EOF
+
+            # Also apply to all other Pulpcore services
+            for service in pulpcore-content pulpcore-worker@1 pulpcore-worker@2 pulpcore-worker@3; do
+              mkdir -p /etc/systemd/system/${service}.service.d
+              cp /etc/systemd/system/pulpcore-api.service.d/ssl.conf /etc/systemd/system/${service}.service.d/
+            done
+
             # Reload systemd
             systemctl daemon-reload
           args:
@@ -650,10 +711,12 @@
         PULP_SETTINGS: /etc/pulp/settings.py
       register: migrate_result
       ignore_errors: yes
+      when: resume_needed | default(false)
 
     - name: Show migration result
       debug:
         msg: "Database migrations: {{ 'SUCCESS' if migrate_result.rc == 0 else 'FAILED' }}"
+      when: resume_needed | default(false)
 
     - name: Continue with collectstatic if migrations succeed
       command: /usr/bin/pulpcore-manager collectstatic --clear --noinput --link --ignore galaxy_ng
@@ -661,13 +724,14 @@
         REQUESTS_CA_BUNDLE: /etc/pki/tls/certs/ca-bundle.crt
         SSL_CERT_FILE: /etc/pki/tls/certs/ca-bundle.crt
         PULP_SETTINGS: /etc/pulp/settings.py
-      when: migrate_result.rc == 0
+      when: migrate_result.rc == 0 and resume_needed | default(false)
       register: collectstatic_result
       ignore_errors: yes
 
     - name: Show collectstatic result
       debug:
         msg: "Collectstatic: {{ 'SUCCESS' if collectstatic_result.rc == 0 else 'FAILED' }}"
+      when: resume_needed | default(false) and migrate_result.rc == 0
 
     - name: Restart Pulpcore services to apply changes
       systemd:
@@ -679,7 +743,7 @@
         - pulpcore-worker@1
         - pulpcore-worker@2
         - pulpcore-worker@3
-      when: migrate_result.rc == 0 and collectstatic_result.rc == 0
+      when: migrate_result.rc == 0 and collectstatic_result.rc == 0 and resume_needed | default(false)
 
     - name: Final AAP setup verification
       command: /usr/bin/pulpcore-manager check
@@ -687,14 +751,12 @@
         REQUESTS_CA_BUNDLE: /etc/pki/tls/certs/ca-bundle.crt
         SSL_CERT_FILE: /etc/pki/tls/certs/ca-bundle.crt
       register: final_check
-      when: migrate_result.rc == 0
+      when: migrate_result.rc == 0 and resume_needed | default(false)
 
     - name: Show final AAP status
       debug:
         msg: "AAP Automation Hub installation: {{ 'COMPLETED SUCCESSFULLY' if final_check.rc == 0 else 'PARTIALLY COMPLETED - check logs' }}"
-      when: migrate_result.rc == 0
-
-  when: resume_needed | default(false)
+      when: migrate_result.rc == 0 and resume_needed | default(false)
 
 # ---------------------------------------------
 # Enhanced Post-deploy health checks
