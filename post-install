@@ -1,0 +1,50 @@
+ ansible -i inventory_controller_only.yml controller01 -m shell -a "systemctl list-units | grep -i autom" --become
+[WARNING]: Platform linux on host controller01 is using the discovered Python interpreter at /usr/bin/python3.9, but future installation of another Python interpreter could
+change the meaning of that path. See https://docs.ansible.com/ansible-core/2.18/reference_appendices/interpreter_discovery.html for more information.
+controller01 | CHANGED | rc=0 >>
+  proc-sys-fs-binfmt_misc.automount                                       loaded active waiting   Arbitrary Executable File Formats File System Automount Point
+  insights-register.path                                                  loaded active waiting   Automatically Register with Red Hat Insights Path Watch
+  insights-unregister.path                                                loaded active waiting   Automatically Unregister from Red Hat Insights Path Watch
+  rhcd-stop.path                                                          loaded active waiting   Automatically stop rhcd by watching if rhsm cert exists
+  rhcd.path                                                               loaded active waiting   Automatically start rhcd with path watch
+  automation-controller.service                                           loaded active exited    Automation Controller service
+  systemd-boot-update.service                                             loaded active exited    Automatic Boot Loader Update
+
+################################
+
+  # Check if controller services are running
+ansible -i inventory_controller_only.yml controller01 -m shell -a "systemctl status automation-controller nginx" --become
+
+controller01 | CHANGED | rc=0 >>
+● automation-controller.service - Automation Controller service
+     Loaded: loaded (/etc/systemd/system/automation-controller.service; enabled; preset: disabled)
+     Active: active (exited) since Sat 2025-10-25 13:44:43 UTC; 8min ago
+    Process: 63791 ExecStart=/bin/true (code=exited, status=0/SUCCESS)
+   Main PID: 63791 (code=exited, status=0/SUCCESS)
+        CPU: 3ms
+
+Oct 25 13:44:43 controller01 systemd[1]: Starting Automation Controller service...
+Oct 25 13:44:43 controller01 systemd[1]: Finished Automation Controller service.
+
+● nginx.service - The nginx HTTP and reverse proxy server
+     Loaded: loaded (/usr/lib/systemd/system/nginx.service; enabled; preset: disabled)
+    Drop-In: /etc/systemd/system/nginx.service.d
+             └─override.conf
+     Active: active (running) since Sat 2025-10-25 09:27:40 UTC; 4h 25min ago
+   Main PID: 54544 (nginx)
+      Tasks: 3 (limit: 47814)
+     Memory: 2.7M
+        CPU: 33ms
+     CGroup: /system.slice/nginx.service
+             ├─54544 "nginx: master process /usr/sbin/nginx"
+             ├─54545 "nginx: worker process"
+             └─54546 "nginx: worker process"
+
+Oct 25 09:27:40 controller01 systemd[1]: Starting The nginx HTTP and reverse proxy server...
+Oct 25 09:27:40 controller01 nginx[54542]: nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+Oct 25 09:27:40 controller01 nginx[54542]: nginx: configuration file /etc/nginx/nginx.conf test is successful
+Oct 25 09:27:40 controller01 systemd[1]: Started The nginx HTTP and reverse proxy server.
+
+################################
+
+
