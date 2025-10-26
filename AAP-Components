@@ -74,7 +74,7 @@ Task Processing: awx-dispatcher + awx-callback-receiver
 Logging: awx-rsyslogd + awx-rsyslog-configurer
 WebSocket: awx-wsrelay + awx-ws-heartbeat
 
-###########
+###########################################################
 
  ./aap_healthcheck.sh
 ===============================================
@@ -132,4 +132,159 @@ tcp6       0      0 :::80                   :::*                    LISTEN      
 === Recent Errors ===
 No recent errors found
 
+#################################################################################################################################################################################
 
+./aap_service_control.sh
+===============================================
+AAP Service Control - Supervisord Environment
+===============================================
+=== Current Status ===
+rsyslog-4xx-recovery                     RUNNING   pid 355431, uptime 22:49:54
+tower-processes:awx-callback-receiver    RUNNING   pid 355433, uptime 22:49:54
+tower-processes:awx-daphne               RUNNING   pid 355449, uptime 22:49:54
+tower-processes:awx-dispatcher           RUNNING   pid 422534, uptime 21:29:44
+tower-processes:awx-rsyslog-configurer   RUNNING   pid 355458, uptime 22:49:54
+tower-processes:awx-rsyslogd             RUNNING   pid 356043, uptime 22:49:41
+tower-processes:awx-uwsgi                RUNNING   pid 355437, uptime 22:49:54
+tower-processes:awx-ws-heartbeat         RUNNING   pid 355459, uptime 22:49:54
+tower-processes:awx-wsrelay              RUNNING   pid 355456, uptime 22:49:54
+
+=== Testing Component Control ===
+Testing restart of: awx-uwsgi
+Restarting awx-uwsgi...
+awx-uwsgi: ERROR (no such process)
+awx-uwsgi: ERROR (no such process)
+Status: tower-processes:awx-uwsgi                RUNNING   pid 355437, uptime 22:49:58
+---
+Testing restart of: awx-dispatcher
+Restarting awx-dispatcher...
+awx-dispatcher: ERROR (no such process)
+awx-dispatcher: ERROR (no such process)
+Status: tower-processes:awx-dispatcher           RUNNING   pid 422534, uptime 21:29:51
+---
+Testing restart of: awx-callback-receiver
+Restarting awx-callback-receiver...
+awx-callback-receiver: ERROR (no such process)
+awx-callback-receiver: ERROR (no such process)
+Status: tower-processes:awx-callback-receiver    RUNNING   pid 355433, uptime 22:50:05
+---
+
+=== Testing Full Restart ===
+Restarting all AAP services...
+rsyslog-4xx-recovery: stopped
+tower-processes:awx-rsyslogd: stopped
+tower-processes:awx-wsrelay: stopped
+tower-processes:awx-rsyslog-configurer: stopped
+tower-processes:awx-ws-heartbeat: stopped
+tower-processes:awx-daphne: stopped
+tower-processes:awx-dispatcher: stopped
+tower-processes:awx-callback-receiver: stopped
+tower-processes:awx-uwsgi: stopped
+tower-processes:awx-dispatcher: started
+tower-processes:awx-callback-receiver: started
+tower-processes:awx-uwsgi: started
+tower-processes:awx-daphne: started
+tower-processes:awx-wsrelay: started
+tower-processes:awx-rsyslogd: started
+tower-processes:awx-rsyslog-configurer: started
+tower-processes:awx-ws-heartbeat: started
+rsyslog-4xx-recovery: started
+
+=== Post-Restart Verification ===
+rsyslog-4xx-recovery                     RUNNING   pid 674038, uptime 0:00:12
+tower-processes:awx-callback-receiver    RUNNING   pid 674040, uptime 0:00:12
+tower-processes:awx-daphne               RUNNING   pid 674042, uptime 0:00:12
+tower-processes:awx-dispatcher           RUNNING   pid 674039, uptime 0:00:12
+tower-processes:awx-rsyslog-configurer   RUNNING   pid 674045, uptime 0:00:12
+tower-processes:awx-rsyslogd             RUNNING   pid 674044, uptime 0:00:12
+tower-processes:awx-uwsgi                RUNNING   pid 674041, uptime 0:00:12
+tower-processes:awx-ws-heartbeat         RUNNING   pid 674046, uptime 0:00:12
+tower-processes:awx-wsrelay              RUNNING   pid 674043, uptime 0:00:12
+
+=== API Health Check ===
+✓ API responsive after restart
+[ec2-user@controller01 ~]$ vi aap_service_control.sh
+[ec2-user@controller01 ~]$
+[ec2-user@controller01 ~]$
+[ec2-user@controller01 ~]$ ./aap_service_control.sh
+===============================================
+AAP Service Control - Supervisord Environment
+===============================================
+=== Current Status ===
+rsyslog-4xx-recovery                     RUNNING   pid 674038, uptime 0:02:39
+tower-processes:awx-callback-receiver    RUNNING   pid 674040, uptime 0:02:39
+tower-processes:awx-daphne               RUNNING   pid 674042, uptime 0:02:39
+tower-processes:awx-dispatcher           RUNNING   pid 674039, uptime 0:02:39
+tower-processes:awx-rsyslog-configurer   RUNNING   pid 674045, uptime 0:02:39
+tower-processes:awx-rsyslogd             RUNNING   pid 674097, uptime 0:02:27
+tower-processes:awx-uwsgi                RUNNING   pid 674041, uptime 0:02:39
+tower-processes:awx-ws-heartbeat         RUNNING   pid 674046, uptime 0:02:39
+tower-processes:awx-wsrelay              RUNNING   pid 674043, uptime 0:02:39
+
+=== Testing Component Control ===
+Testing restart of: tower-processes:awx-uwsgi
+Restarting tower-processes:awx-uwsgi...
+tower-processes:awx-uwsgi: stopped
+tower-processes:awx-uwsgi: started
+Status: tower-processes:awx-uwsgi                RUNNING   pid 674129, uptime 0:00:03
+---
+Testing restart of: tower-processes:awx-dispatcher
+Restarting tower-processes:awx-dispatcher...
+tower-processes:awx-dispatcher: stopped
+tower-processes:awx-dispatcher: started
+Status: tower-processes:awx-dispatcher           RUNNING   pid 674147, uptime 0:00:04
+---
+Testing restart of: tower-processes:awx-callback-receiver
+Restarting tower-processes:awx-callback-receiver...
+tower-processes:awx-callback-receiver: stopped
+tower-processes:awx-callback-receiver: started
+Status: tower-processes:awx-callback-receiver    RUNNING   pid 674165, uptime 0:00:03
+---
+
+=== Testing Full Restart ===
+Restarting all AAP services...
+tower-processes:awx-wsrelay: stopped
+rsyslog-4xx-recovery: stopped
+tower-processes:awx-rsyslogd: stopped
+tower-processes:awx-rsyslog-configurer: stopped
+tower-processes:awx-daphne: stopped
+tower-processes:awx-ws-heartbeat: stopped
+tower-processes:awx-callback-receiver: stopped
+tower-processes:awx-dispatcher: stopped
+tower-processes:awx-uwsgi: stopped
+tower-processes:awx-dispatcher: started
+tower-processes:awx-callback-receiver: started
+tower-processes:awx-uwsgi: started
+tower-processes:awx-daphne: started
+tower-processes:awx-wsrelay: started
+tower-processes:awx-rsyslogd: started
+tower-processes:awx-rsyslog-configurer: started
+tower-processes:awx-ws-heartbeat: started
+rsyslog-4xx-recovery: started
+
+=== Post-Restart Verification ===
+rsyslog-4xx-recovery                     RUNNING   pid 674183, uptime 0:00:12
+tower-processes:awx-callback-receiver    RUNNING   pid 674185, uptime 0:00:12
+tower-processes:awx-daphne               RUNNING   pid 674187, uptime 0:00:12
+tower-processes:awx-dispatcher           RUNNING   pid 674184, uptime 0:00:12
+tower-processes:awx-rsyslog-configurer   RUNNING   pid 674190, uptime 0:00:12
+tower-processes:awx-rsyslogd             RUNNING   pid 674189, uptime 0:00:12
+tower-processes:awx-uwsgi                RUNNING   pid 674186, uptime 0:00:12
+tower-processes:awx-ws-heartbeat         RUNNING   pid 674191, uptime 0:00:12
+tower-processes:awx-wsrelay              RUNNING   pid 674188, uptime 0:00:12
+
+=== API Health Check ===
+✓ API responsive after restart
+
+=== All Available Service Names ===
+rsyslog-4xx-recovery
+tower-processes:awx-callback-receiver
+tower-processes:awx-daphne
+tower-processes:awx-dispatcher
+tower-processes:awx-rsyslog-configurer
+tower-processes:awx-rsyslogd
+tower-processes:awx-uwsgi
+tower-processes:awx-ws-heartbeat
+tower-processes:awx-wsrelay
+
+#################################################################################################################################################################################
