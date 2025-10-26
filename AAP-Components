@@ -288,3 +288,80 @@ tower-processes:awx-ws-heartbeat
 tower-processes:awx-wsrelay
 
 #################################################################################################################################################################################
+
+./aap_backup_controller_only.sh
+===============================================
+AAP Backup Operations - Controller Only
+===============================================
+Backup directory: /opt/backups/aap_controller_20251026_211332
+Note: PostgreSQL is hosted on db01 (separate server)
+=== Step 1: Stopping Services ===
+rsyslog-4xx-recovery: stopped
+tower-processes:awx-rsyslogd: stopped
+tower-processes:awx-wsrelay: stopped
+tower-processes:awx-rsyslog-configurer: stopped
+tower-processes:awx-ws-heartbeat: stopped
+tower-processes:awx-daphne: stopped
+tower-processes:awx-dispatcher: stopped
+tower-processes:awx-callback-receiver: stopped
+tower-processes:awx-uwsgi: stopped
+=== Step 2: Configuration Backup ===
+Backing up AAP configurations...
+✓ AAP configurations backed up
+=== Step 3: Data Directory Backup ===
+Backing up /var/lib/awx...
+✓ AWX data directory backed up
+=== Step 4: Projects and Artifacts Backup ===
+✓ Projects backed up
+✓ Job artifacts backed up
+=== Step 5: Log Backup ===
+✓ Log files backed up
+=== Step 6: SSL Certificates Backup ===
+✓ SSL certificates backed up
+=== Step 7: Creating Backup Metadata ===
+./aap_backup_controller_only.sh: line 73: /opt/backups/aap_controller_20251026_211332/backup_metadata.txt: Permission denied
+./aap_backup_controller_only.sh: line 89: /opt/backups/aap_controller_20251026_211332/RESTORE_INSTRUCTIONS.md: Permission denied
+=== Step 8: Restarting Services ===
+tower-processes:awx-dispatcher: started
+tower-processes:awx-callback-receiver: started
+tower-processes:awx-uwsgi: started
+tower-processes:awx-daphne: started
+tower-processes:awx-wsrelay: started
+tower-processes:awx-rsyslogd: started
+tower-processes:awx-rsyslog-configurer: started
+tower-processes:awx-ws-heartbeat: started
+rsyslog-4xx-recovery: started
+=== Step 9: Backup Verification ===
+Backup contents:
+total 141752
+drwxr-xr-x. 2 root root       148 Oct 26 21:14 .
+drwxr-xr-x. 3 root root        44 Oct 26 21:13 ..
+-rw-r--r--. 1 root root     26249 Oct 26 21:13 aap_config.tar.gz
+-rw-r--r--. 1 root root 145032106 Oct 26 21:14 awx_data.tar.gz
+-rw-r--r--. 1 root root       126 Oct 26 21:14 job_artifacts.tar.gz
+-rw-r--r--. 1 root root     63700 Oct 26 21:14 logs.tar.gz
+-rw-r--r--. 1 root root       129 Oct 26 21:14 projects.tar.gz
+-rw-r--r--. 1 root root     12960 Oct 26 21:14 ssl_certs.tar.gz
+
+Backup size:
+139M    /opt/backups/aap_controller_20251026_211332
+
+=== Step 10: Service Recovery Check ===
+Service status:
+rsyslog-4xx-recovery                     RUNNING   pid 674633, uptime 0:00:32
+tower-processes:awx-callback-receiver    RUNNING   pid 674635, uptime 0:00:32
+tower-processes:awx-daphne               RUNNING   pid 674637, uptime 0:00:32
+tower-processes:awx-dispatcher           RUNNING   pid 674634, uptime 0:00:32
+tower-processes:awx-rsyslog-configurer   RUNNING   pid 674640, uptime 0:00:32
+tower-processes:awx-rsyslogd             RUNNING   pid 674691, uptime 0:00:19
+tower-processes:awx-uwsgi                RUNNING   pid 674636, uptime 0:00:32
+tower-processes:awx-ws-heartbeat         RUNNING   pid 674641, uptime 0:00:32
+tower-processes:awx-wsrelay              RUNNING   pid 674638, uptime 0:00:32
+
+API check:
+✓ API is responsive
+
+=== Backup Complete ===
+Backup saved to: /opt/backups/aap_controller_20251026_211332
+Important: PostgreSQL backup must be performed separately on db01
+
