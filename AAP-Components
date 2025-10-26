@@ -365,3 +365,73 @@ API check:
 Backup saved to: /opt/backups/aap_controller_20251026_211332
 Important: PostgreSQL backup must be performed separately on db01
 
+##################################################################################################################################################################################################################
+
+./aap_cli_api_operations.sh
+===============================================
+AAP CLI & API Operations - Fixed Authentication
+===============================================
+=== Checking Dependencies ===
+✓ Dependencies checked
+Using stored credentials
+=== Creating API Token ===
+Testing credentials...
+Could not retrieve CSRF token
+No valid session. Cannot create token.
+Automated token creation failed. Trying manual method...
+=== Manual Token Creation Required ===
+Automatic token creation failed. Please create a token manually:
+1. Open your browser and go to: https://localhost
+2. Log in with your credentials
+3. Click on your username in the top right
+4. Select 'Tokens' from the dropdown
+5. Click 'Add' to create a new token
+6. Copy the token value and paste it below
+
+Enter your API token: GfMUgkmvn5GngNQQSSHF2kOh7YUuzQ
+✓ Token saved to /home/ec2-user/.aap_token
+Using existing API token
+Testing API connectivity...
+✓ API connectivity: SUCCESS
+Testing API connectivity...
+✓ API connectivity: SUCCESS
+✓ Ready to use AAP API
+=== User Information ===
+Username: null
+Email: Not set
+Superuser: null
+=== Platform Information ===
+{
+  "version": "4.5.26",
+  "install_uuid": null,
+  "time_zone": "UTC",
+  "license_type": null,
+  "project_base_dir": "/var/lib/awx/projects"
+}
+=== Resource Overview ===
+Projects: 0
+Inventories: 0
+Organizations: 0
+Credentials: 0
+Job Templates: 0
+
+=== AAP API Operations ===
+1) Job Template Operations
+2) Test API
+3) Exit
+Select operation (1-3): 2
+Testing API connectivity...
+✓ API connectivity: SUCCESS
+
+=== AAP API Operations ===
+1) Job Template Operations
+2) Test API
+3) Exit
+Select operation (1-3): 1
+=== Job Templates ===
+
+=== AAP API Operations ===
+1) Job Template Operations
+2) Test API
+3) Exit
+
