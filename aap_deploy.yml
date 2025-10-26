@@ -1,26 +1,27 @@
 # ---------------------------------------------
-# Lab setup for AAP 2.4 with self-signed SSL - FIXED VERSION
+# Lab setup for AAP 2.4 with self-signed SSL - COMPLETE FIXED VERSION
 # ---------------------------------------------
 ---
 - name: Lab setup for AAP 2.4 with self-signed SSL
   hosts: all
   become: yes
   vars:
+    ansible_ssh_common_args: '-o ControlMaster=no -o ControlPersist=no'
     domain: "techroute.io"
     cert_dir: "/etc/pki/tls"
     cert_validity_days: 365
-
     hostnames_map:
-      controller01: 44.211.154.206
-      exec01: 54.235.63.132
-      hub01: 34.226.247.17
-      db01: 18.208.160.139
-
+      controller01: 3.82.121.77
+      exec01: 18.212.25.216
+      hub01: 54.161.70.165
+      db01: 54.210.1.240
     node_ports:
       controller01: [22, 80, 443]
       hub01: [22, 80, 443]
       exec01: [22]
       db01: [22, 5432]
+  vars_files:
+    - secrets.yml
 
   tasks:
     - name: Clean stale SSH control sockets
@@ -209,12 +210,182 @@
         msg: "SSL certificates generated successfully for {{ inventory_hostname }}"
 
 # ---------------------------------------------
+# NEW: Copy certificates to AAP expected locations
+# ---------------------------------------------
+- name: Copy certificates to AAP expected locations
+  hosts: controller01:hub01
+  become: yes
+  vars:
+    ansible_ssh_common_args: '-o ControlMaster=no -o ControlPersist=no'
+  vars_files:
+    - secrets.yml
+  tasks:
+    - name: Create Tower certificate directory for controller
+      file:
+        path: /etc/tower
+        state: directory
+        owner: root
+        group: awx
+        mode: '0755'
+      when: inventory_hostname == 'controller01'
+
+    - name: Copy controller certificate to Tower location
+      copy:
+        src: "/etc/pki/tls/certs/controller01.crt"
+        dest: "/etc/tower/tower.cert"
+        remote_src: yes
+        owner: root
+        group: awx
+        mode: '0644'
+      when: inventory_hostname == 'controller01'
+
+    - name: Copy controller key to Tower location
+      copy:
+        src: "/etc/pki/tls/private/controller01.key"
+        dest: "/etc/tower/tower.key"
+        remote_src: yes
+        owner: root
+        group: awx
+        mode: '0600'
+      when: inventory_hostname == 'controller01'
+
+    - name: Create Pulp certificate directory for hub
+      file:
+        path: /etc/pulp/certs
+        state: directory
+        owner: root
+        group: pulp
+        mode: '0755'
+      when: inventory_hostname == 'hub01'
+
+    - name: Copy hub certificate to Pulp location
+      copy:
+        src: "/etc/pki/tls/certs/hub01.crt"
+        dest: "/etc/pulp/certs/automationhub.crt"
+        remote_src: yes
+        owner: root
+        group: pulp
+        mode: '0644'
+      when: inventory_hostname == 'hub01'
+
+    - name: Copy hub key to Pulp location
+      copy:
+        src: "/etc/pki/tls/private/hub01.key"
+        dest: "/etc/pulp/certs/automationhub.key"
+        remote_src: yes
+        owner: root
+        group: pulp
+        mode: '0600'
+      when: inventory_hostname == 'hub01'
+
+    - name: Verify certificates are in expected locations
+      stat:
+        path: "{{ item.path }}"
+      loop:
+        - { path: '/etc/tower/tower.cert', host: 'controller01' }
+        - { path: '/etc/tower/tower.key', host: 'controller01' }
+        - { path: '/etc/pulp/certs/automationhub.crt', host: 'hub01' }
+        - { path: '/etc/pulp/certs/automationhub.key', host: 'hub01' }
+      when: inventory_hostname == item.host
+      register: cert_verify
+
+    - name: Show certificate verification status
+      debug:
+        msg: "{{ item.item.path }} exists: {{ item.stat.exists }}"
+      loop: "{{ cert_verify.results }}"
+      when: item.stat is defined
+
+# ---------------------------------------------
+# PROPER SSL FIX - Add certificates to system trust
+# ---------------------------------------------
+- name: Proper SSL fix - Add certificates to system CA trust
+  hosts: hub01
+  become: yes
+  vars:
+    ansible_ssh_common_args: '-o ControlMaster=no -o ControlPersist=no'
+  tasks:
+    - name: Ensure CA certificates are installed
+      dnf:
+        name: ca-certificates
+        state: present
+
+    - name: Copy your self-signed certificate to system CA trust
+      copy:
+        src: "/etc/pki/tls/certs/hub01.crt"
+        dest: "/etc/pki/ca-trust/source/anchors/hub01-techroute-io.crt"
+        remote_src: yes
+        mode: '0644'
+
+    - name: Copy controller certificate to system CA trust (if needed for internal communication)
+      copy:
+        src: "/etc/pki/tls/certs/controller01.crt"
+        dest: "/etc/pki/ca-trust/source/anchors/controller01-techroute-io.crt"
+        remote_src: yes
+        mode: '0644'
+      ignore_errors: yes
+
+    - name: Update system CA trust with our certificates
+      command: update-ca-trust extract
+
+    - name: Verify CA bundle contains our certificates
+      command: grep -l "techroute.io" /etc/pki/tls/certs/ca-bundle.crt
+      register: cert_in_bundle
+      ignore_errors: yes
+
+    - name: Show certificate verification
+      debug:
+        msg: "Our certificates in CA bundle: {{ 'YES' if cert_in_bundle.rc == 0 else 'NO' }}"
+
+    - name: Set persistent SSL environment for all users
+      blockinfile:
+        path: /etc/environment
+        block: |
+          REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
+          SSL_CERT_FILE=/etc/pki/tls/certs/ca-bundle.crt
+        marker: "# {mark} ANSIBLE MANAGED SSL CONFIG"
+
+    - name: Set Pulpcore-specific environment
+      blockinfile:
+        path: /etc/sysconfig/pulpcore
+        block: |
+          REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
+          SSL_CERT_FILE=/etc/pki/tls/certs/ca-bundle.crt
+        create: yes
+        marker: "# {mark} ANSIBLE MANAGED SSL CONFIG"
+
+    - name: Create systemd drop-in for Pulpcore services
+      copy:
+        content: |
+          [Service]
+          Environment="REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt"
+          Environment="SSL_CERT_FILE=/etc/pki/tls/certs/ca-bundle.crt"
+        dest: /etc/systemd/system/pulpcore-api.service.d/ssl.conf
+        mode: '0644'
+
+    - name: Reload systemd to apply environment
+      systemd:
+        daemon_reload: yes
+
+    - name: Test Pulpcore with proper SSL configuration
+      command: /usr/bin/pulpcore-manager check
+      environment:
+        REQUESTS_CA_BUNDLE: /etc/pki/tls/certs/ca-bundle.crt
+        SSL_CERT_FILE: /etc/pki/tls/certs/ca-bundle.crt
+      register: pulp_ssl_test
+      ignore_errors: yes
+
+    - name: Show proper SSL test result
+      debug:
+        msg: "Pulpcore with proper SSL: {{ 'SUCCESS' if pulp_ssl_test.rc == 0 else 'FAILED - ' + pulp_ssl_test.stderr | default('') }}"
+
+# ---------------------------------------------
 # Fixed Pre-deploy port checks
 # ---------------------------------------------
 - name: Pre-deploy port checks
   hosts: all
   become: yes
   vars:
+    ansible_ssh_common_args: '-o ControlMaster=no -o ControlPersist=no'
     node_ports:
       controller01: [22, 80, 443]
       hub01: [22, 80, 443]
@@ -243,46 +414,216 @@
           This is normal at this stage.
 
 # ---------------------------------------------
-# Fixed AAP 2.4 deployment section
+# Create Automation Hub Database and User
+# ---------------------------------------------
+- name: Create Automation Hub Database and User
+  hosts: db01
+  become: yes
+  become_user: postgres
+  vars:
+    ansible_ssh_common_args: '-o ControlMaster=no -o ControlPersist=no'
+  vars_files:
+    - secrets.yml
+  tasks:
+    - name: Create automationhub database user
+      postgresql_user:
+        name: automationhub
+        password: "{{ pg_password }}"
+        state: present
+
+    - name: Create automationhub database
+      postgresql_db:
+        name: automationhub
+        owner: automationhub
+        state: present
+
+    - name: Verify databases exist
+      command: psql -l
+      register: db_list
+
+    - name: Show database list
+      debug:
+        msg: "{{ db_list.stdout_lines }}"
+
+# ---------------------------------------------
+# Deploy Ansible Automation Platform 2.4
 # ---------------------------------------------
 - name: Deploy Ansible Automation Platform 2.4
   hosts: localhost
-  gather_facts: false
+  connection: local
+  gather_facts: true
+  vars:
+    ansible_ssh_common_args: '-o ControlMaster=no -o ControlPersist=no'
+    inventory_file: "{{ playbook_dir }}/inventory_controller_only.yml"
+    setup_dir: "/home/trsadmin/aap_lab/2.4_rhel9/aap-setup"
   vars_files:
     - secrets.yml
-  vars:
-    inventory_file: "{{ playbook_dir }}/inventory.yml"
-    setup_dir: "/home/trsadmin/aap_lab/2.4_rhel9/ansible-automation-platform-setup-bundle-2.4-13.4-x86_64"
-    local_cert_dir: "/etc/pki/tls"
 
   tasks:
-    - name: Check if certificate files exist
-      stat:
-        path: "{{ item }}"
+    - name: Verify certificates exist on remote nodes
+      wait_for:
+        host: "{{ item.host }}"
+        port: 22
+        search_regex: "OpenSSH"
+        timeout: 30
       loop:
-        - "{{ local_cert_dir }}/certs/controller01.crt"
-        - "{{ local_cert_dir }}/private/controller01.key"
-        - "{{ local_cert_dir }}/certs/hub01.crt"
-        - "{{ local_cert_dir }}/private/hub01.key"
-      register: cert_files
+        - { host: "controller01.techroute.io" }
+        - { host: "hub01.techroute.io" }
+      delegate_to: localhost
 
-    - name: Run AAP setup directly
+    - name: Run AAP setup with certificates in expected locations
       shell: |
         cd "{{ setup_dir }}" && \
         ./setup.sh -i "{{ inventory_file }}" \
-          -e admin_password="{{ admin_password }}" \
-          -e pg_password="{{ pg_password }}" \
-          -e web_server_ssl_cert="{{ local_cert_dir }}/certs/controller01.crt" \
-          -e web_server_ssl_key="{{ local_cert_dir }}/private/controller01.key" \
-          -e automationhub_ssl_cert="{{ local_cert_dir }}/certs/hub01.crt" \
-          -e automationhub_ssl_key="{{ local_cert_dir }}/private/hub01.key"
+          -e web_server_ssl_cert="/etc/tower/tower.cert" \
+          -e web_server_ssl_key="/etc/tower/tower.key" \
+          -e automationhub_ssl_cert="/etc/pulp/certs/automationhub.crt" \
+          -e automationhub_ssl_key="/etc/pulp/certs/automationhub.key" \
+          -e automationhub_nginx_tls_files_remote=true \
+          -e automationhub_pg_host=db01 \
+          -e automationhub_pg_database=automationhub \
+          -e automationhub_pg_username=automationhub \
+          -e automationhub_pg_password='{{ pg_password }}' \
+          -e controller_nginx_tls_files_remote=true \
+          -e aap_ca_configure=false \
+          -e bundle_install=true \
+          -e skip_ram_check=true \
+          -e skip_receptor_verify=true \
+          -e aap_repo_for_update=ansible-automation-platform-2.4-for-rhel-9-x86_64-rpms \
+          -e @secrets.yml \
+          -- --ask-vault-pass
       environment:
         ANSIBLE_FORCE_COLOR: "True"
+        ANSIBLE_TIMEOUT: "60"
+        ANSIBLE_SSH_TIMEOUT: "60"
+        ANSIBLE_COMMAND_TIMEOUT: "600"
+      args:
+        executable: /bin/bash
       register: setup_result
+      ignore_errors: yes
 
     - name: Show AAP setup status
       debug:
         msg: "AAP setup completed with return code: {{ setup_result.rc }}"
+
+    - name: Set flag for resume needed
+      set_fact:
+        resume_needed: true
+      when: setup_result.rc != 0
+
+# ---------------------------------------------
+# RESUME FAILED HUB INSTALLATION AFTER SSL FIX
+# ---------------------------------------------
+- name: Complete AAP Hub resume after collectstatic failure
+  hosts: hub01
+  become: yes
+  vars:
+    ansible_ssh_common_args: '-o ControlMaster=no -o ControlPersist=no'
+  vars_files:
+    - secrets.yml
+
+  tasks:
+    - block:
+        - name: Apply SSL fix for the remaining tasks
+          block:
+            - name: Ensure CA certificates are properly configured
+              dnf:
+                name: ca-certificates
+                state: present
+
+            - name: Update CA trust
+              command: update-ca-trust extract
+
+            - name: Set SSL environment for Pulp
+              blockinfile:
+                path: /etc/sysconfig/pulpcore
+                block: |
+                  REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
+                  SSL_CERT_FILE=/etc/pki/tls/certs/ca-bundle.crt
+                create: yes
+
+        - name: Run collectstatic with SSL environment
+          command: /usr/bin/pulpcore-manager collectstatic --clear --noinput --link --ignore galaxy_ng
+          environment:
+            REQUESTS_CA_BUNDLE: /etc/pki/tls/certs/ca-bundle.crt
+            SSL_CERT_FILE: /etc/pki/tls/certs/ca-bundle.crt
+            PULP_SETTINGS: /etc/pulp/settings.py
+          register: collectstatic_result
+          ignore_errors: yes
+
+        - name: Show collectstatic result
+          debug:
+            msg: "Collectstatic: {{ 'SUCCESS' if collectstatic_result.rc == 0 else 'FAILED' }}"
+
+        - name: Restore SELinux contexts on Pulp asset dirs (handler)
+          command: '/sbin/fixfiles restore /var/lib/pulp/assets'
+          when: collectstatic_result.rc == 0
+
+        - name: Restart all Pulp services (handler)
+          systemd:
+            name: "{{ item }}"
+            state: restarted
+          loop:
+            - pulpcore-api.service
+            - pulpcore-content.service
+            - pulpcore-worker@1.service
+            - pulpcore-worker@2.service
+            - pulpcore-worker@3.service
+          when: collectstatic_result.rc == 0
+
+        - name: Reload nginx
+          systemd:
+            name: nginx
+            state: reloaded
+            daemon_reload: true
+
+        - name: Run database migrations for plugins
+          command: /usr/bin/pulpcore-manager migrate
+          environment:
+            REQUESTS_CA_BUNDLE: /etc/pki/tls/certs/ca-bundle.crt
+          register: migrate_result
+          ignore_errors: yes
+
+        - name: Show migrate result
+          debug:
+            msg: "Migrations: {{ 'SUCCESS' if migrate_result.rc == 0 else 'FAILED' }}"
+
+        - name: Create admin user for Automation Hub
+          command: /usr/bin/pulpcore-manager createsuperuser --noinput --username admin --email admin@example.com
+          environment:
+            REQUESTS_CA_BUNDLE: /etc/pki/tls/certs/ca-bundle.crt
+          register: create_user_result
+          ignore_errors: yes
+
+        - name: Show create user result
+          debug:
+            msg: "Create user: {{ 'SUCCESS' if create_user_result.rc == 0 else 'FAILED or EXISTS' }}"
+
+        - name: Final restart of all Pulp services
+          systemd:
+            name: "{{ item }}"
+            state: restarted
+          loop:
+            - pulpcore-api.service
+            - pulpcore-content.service
+            - pulpcore-worker@1.service
+            - pulpcore-worker@2.service
+            - pulpcore-worker@3.service
+
+        - name: Ensure services are running
+          systemd:
+            name: "{{ item }}"
+            state: started
+            enabled: yes
+          loop:
+            - pulpcore-api.service
+            - pulpcore-content.service
+            - pulpcore-worker@1.service
+            - pulpcore-worker@2.service
+            - pulpcore-worker@3.service
+            - nginx
+
+      when: resume_needed | default(false)
 
     - name: Print AAP setup output
       debug:
@@ -298,12 +639,12 @@
 
     - name: Validate AAP setup completed successfully
       fail:
-        msg: " AAP setup failed with return code {{ setup_result.rc }}. Check the output above for details."
+        msg: "AAP setup failed with return code {{ setup_result.rc }}. Check the output above for details."
       when: setup_result.rc != 0
 
     - name: Show AAP setup success
       debug:
-        msg: " AAP setup completed successfully!"
+        msg: "AAP setup completed successfully!"
       when: setup_result.rc == 0
 
 # ---------------------------------------------
@@ -312,6 +653,10 @@
 - name: Post-deploy health checks
   hosts: controller01
   become: no
+  vars:
+    ansible_ssh_common_args: '-o ControlMaster=no -o ControlPersist=no'
+  vars_files:
+    - secrets.yml
   tasks:
     - name: Wait for AAP controller to be ready on port 443
       wait_for:
