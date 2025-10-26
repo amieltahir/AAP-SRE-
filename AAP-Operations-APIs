@@ -1,0 +1,98 @@
+## JOB TEMPLATES & EXECUTION
+GET https://3.82.121.77/api/v2/job_templates/
+
+## Get specific job template
+GET https://3.82.121.77/api/v2/job_templates/id
+
+## Launch job template
+POST https://3.82.121.77/api/v2/job_templates/id/launch/
+
+## Check job status
+GET https://3.82.121.77/api/v2/jobs/
+
+## Get job output
+GET https://3.82.121.77/api/v2/id/job_events/
+
+######################################################################
+
+## INVENTORY & HOSTS
+
+# List inventories
+GET  https://3.82.121.77/api/v2/inventories/
+
+# Get inventory hosts
+GET  https://3.82.121.77/api/v2/inventories/{id}/hosts/
+
+# List all hosts
+GET  https://3.82.121.77/api/v2/hosts/
+
+# Get host details
+GET https://3.82.121.77/api/v2/hosts/{id}/
+
+#########################################################################
+##  PROJECTS & SCM
+
+### List projects
+GET https://3.82.121.77/api/v2/projects/
+
+# Sync project (update from SCM)
+POST https://3.82.121.77/api/v2/projects/{id}/update/
+
+# Check project status
+GET https://3.82.121.77/api/v2/projects/{id}/
+
+#############################################################################
+
+##  CREDENTIALS
+
+# List credentials
+GET https://3.82.121.77/api/v2/credentials/
+
+# Get credential types
+GET https://3.82.121.77/api/v2/credential_types/
+
+#############################################################################
+
+## ORG & Teams
+
+# List organizations
+GET https://3.82.121.77/api/v2/organizations/
+
+# List teams
+GET https://3.82.121.77/api/v2/teams/
+
+###########################################################################
+
+### MONITORING & ACTIVITY
+
+# Activity stream (audit log)
+GET https://3.82.121.77/api/v2/activity_stream/
+
+# Dashboard stats
+GET https://3.82.121.77/api/v2/dashboard/
+
+# Instance health
+GET https://3.82.121.77/api/v2/instances/
+
+######################################################
+
+examples 
+
+# 1. Launch a job and monitor it
+JOB_ID=$(curl -s -H "Authorization: Bearer $TOKEN" -X POST $URL/job_templates/1/launch/ | jq -r '.id')
+
+# 2. Check job status until complete
+while true; do
+    STATUS=$(curl -s -H "Authorization: Bearer $TOKEN" $URL/jobs/$JOB_ID/ | jq -r '.status')
+    [[ $STATUS =~ (successful|failed) ]] && break
+    sleep 5
+done
+
+# 3. Get job results
+curl -s -H "Authorization: Bearer $TOKEN" $URL/jobs/$JOB_ID/ | jq '.result_stdout'
+
+# 4. List resources with counts
+for resource in job_templates inventories projects; do
+    COUNT=$(curl -s -H "Authorization: Bearer $TOKEN" $URL/$resource/ | jq '.count')
+    echo "$resource: $COUNT"
+done
