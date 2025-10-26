@@ -1,1 +1,135 @@
 
+Controller	Core UI/API engine	Manages job templates, projects, inventories, credentials
+Automation Hub (Hub)	Stores certified collections	Allows version control and collection management
+Execution Environments (EE)	Containerized runtime for Ansible jobs	Built via ansible-builder, ensures reproducible jobs
+Database (PostgreSQL)	Stores all metadata and job history	Backup/restore critical for lifecycle management
+EDA (Event-Driven Ansible)	Automates event triggers	Rules, Sources, and Actions, can integrate with Webhooks
+Navigator (CLI)	Local command line interface	Interacts with AAP using ansible-navigator
+
+####################################
+
+
+Component	Role	Practical Notes	How to Validate
+Controller	Core UI/API engine	The brain of AAP. Manages RBAC, job scheduling, and state management	sudo systemctl status ansible-automation-platform
+Database (PostgreSQL)	Stores metadata & job history	Critical for backup/restore. Default: embedded PostgreSQL	sudo awx-manage dbshell then \l
+Redis	Message broker & caching	Used for celery task queue and caching	sudo systemctl status redis
+Celery Workers	Async task execution	Handles job execution in background	sudo systemctl status awx-celery-worker
+Web Service (nginx)	Web UI & API proxy	Serves the UI and proxies API requests	sudo systemctl status nginx or awx-web
+Execution Environments	Containerized runtime	Isolated environments for job execution	Check in UI: Administration → Execution Environments
+
+##################################################################
+
+Service name: automation-controller.service
+Control script: /usr/bin/automation-controller-service
+
+# Start by checking the current state
+echo "=== Current AAP Service Status ==="
+sudo systemctl status automation-controller.service
+sudo automation-controller-service status
+
+# Check what the service depends on
+echo "=== Service Dependencies ==="
+sudo systemctl list-dependencies automation-controller.service
+
+# Check if it's enabled to start on boot
+echo "=== Service Enablement Status ==="
+sudo systemctl is-enabled automation-controller.service
+
+#################################
+
+# Start the automation controller
+echo "=== Starting Automation Controller ==="
+sudo automation-controller-service start
+
+AAP is actually running via supervisord, not via the systemd service. The automation-controller.service shows "active (exited)" because it just runs /bin/true and doesn't actually manage the services.
+
+sudo supervisorctl status
+rsyslog-4xx-recovery                     RUNNING   pid 355431, uptime 22:34:36
+tower-processes:awx-callback-receiver    RUNNING   pid 355433, uptime 22:34:36
+tower-processes:awx-daphne               RUNNING   pid 355449, uptime 22:34:36
+tower-processes:awx-dispatcher           RUNNING   pid 422534, uptime 21:14:26
+tower-processes:awx-rsyslog-configurer   RUNNING   pid 355458, uptime 22:34:36
+tower-processes:awx-rsyslogd             RUNNING   pid 356043, uptime 22:34:23
+tower-processes:awx-uwsgi                RUNNING   pid 355437, uptime 22:34:36
+tower-processes:awx-ws-heartbeat         RUNNING   pid 355459, uptime 22:34:36
+tower-processes:awx-wsrelay              RUNNING   pid 355456, uptime 22:34:36
+
+
+# Check the supervisord configuration
+echo "=== Supervisord Configuration ==="
+sudo cat /etc/supervisord.conf
+
+# Check for AAP-specific supervisord configs
+echo "=== AAP Supervisord Configs ==="
+sudo find /etc -name "*supervisord*" -type f 2>/dev/null
+
+###############
+
+AAP Architecture:
+
+Process Manager: Supervisord
+Key Components: Managed via tower-processes group in supervisord
+Web Service: awx-uwsgi + awx-daphne
+Task Processing: awx-dispatcher + awx-callback-receiver
+Logging: awx-rsyslogd + awx-rsyslog-configurer
+WebSocket: awx-wsrelay + awx-ws-heartbeat
+
+###########
+
+ ./aap_healthcheck.sh
+===============================================
+AAP Health Check - Supervisord Environment
+===============================================
+=== Supervisord Status ===
+rsyslog-4xx-recovery                     RUNNING   pid 355431, uptime 22:44:51
+tower-processes:awx-callback-receiver    RUNNING   pid 355433, uptime 22:44:51
+tower-processes:awx-daphne               RUNNING   pid 355449, uptime 22:44:51
+tower-processes:awx-dispatcher           RUNNING   pid 422534, uptime 21:24:41
+tower-processes:awx-rsyslog-configurer   RUNNING   pid 355458, uptime 22:44:51
+tower-processes:awx-rsyslogd             RUNNING   pid 356043, uptime 22:44:38
+tower-processes:awx-uwsgi                RUNNING   pid 355437, uptime 22:44:51
+tower-processes:awx-ws-heartbeat         RUNNING   pid 355459, uptime 22:44:51
+tower-processes:awx-wsrelay              RUNNING   pid 355456, uptime 22:44:51
+
+=== Process Counts ===
+UWSGI workers: 5
+Callback receivers: 5
+Dispatchers: 5
+Total AAP processes: 20
+
+=== System Resources ===
+Memory usage:
+USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+awx       422534  0.2  1.9 646708 151768 ?       Sl   Oct25   3:17 /var/lib/awx/venv/awx/bin/python /usr/bin/awx-manage run_dispatcher
+awx       673084  0.2  1.9 650624 149728 ?       Sl   19:21   0:10 /var/lib/awx/venv/awx/bin/python /usr/bin/awx-manage run_dispatcher
+awx       673087  0.1  1.8 647392 142560 ?       Sl   19:21   0:06 /var/lib/awx/venv/awx/bin/python /usr/bin/awx-manage run_dispatcher
+awx       673089  0.1  1.8 647352 142560 ?       Sl   19:21   0:06 /var/lib/awx/venv/awx/bin/python /usr/bin/awx-manage run_dispatcher
+awx       673081  0.1  1.8 647344 142432 ?       Sl   19:21   0:06 /var/lib/awx/venv/awx/bin/python /usr/bin/awx-manage run_dispatcher
+awx       355458  0.0  1.8 149432 141584 ?       S    Oct25   0:04 /var/lib/awx/venv/awx/bin/python /usr/bin/awx-manage run_rsyslog_configurer
+awx       355433  0.0  1.8 149484 141580 ?       S    Oct25   0:03 /var/lib/awx/venv/awx/bin/python /usr/bin/awx-manage run_callback_receiver
+awx       673336  0.1  1.7 154180 137044 ?       S    19:58   0:04 /var/lib/awx/venv/awx/bin/uwsgi --socket /var/run/tower/uwsgi.sock --module=awx.wsgi:application --stats /var/lib/awx/uwsgi.stats --chmod-socket=660 --vacuum --master --no-orphans --buffer-size=32768 --listen=4096 --workers=16 --worker-reload-mercy=30 --harakiri=120 --max-worker-lifetime=3600 --max-requests=100000 --reload-on-rss=1024 --cheaper=4 --cheaper-algo=busyness --cheaper-initial=4 --cheaper-step=2
+awx       355456  0.0  1.7 216460 135432 ?       Sl   Oct25   0:24 /var/lib/awx/venv/awx/bin/python /usr/bin/awx-manage run_wsrelay
+
+Disk space:
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/nvme0n1p4   39G  3.7G   36G  10% /
+/dev/nvme0n1p4   39G  3.7G   36G  10% /
+/dev/nvme0n1p4   39G  3.7G   36G  10% /
+
+=== API Health ===
+✓ API is responsive
+✓ AAP Version: unknown
+
+=== Web Interface ===
+✓ Web interface is accessible
+
+=== Network Ports ===
+tcp        0      0 0.0.0.0:443             0.0.0.0:*               LISTEN      76098/nginx: master
+tcp        0      0 0.0.0.0:80              0.0.0.0:*               LISTEN      76098/nginx: master
+tcp6       0      0 :::443                  :::*                    LISTEN      76098/nginx: master
+tcp6       0      0 :::80                   :::*                    LISTEN      76098/nginx: master
+
+=== Recent Errors ===
+No recent errors found
+
+
